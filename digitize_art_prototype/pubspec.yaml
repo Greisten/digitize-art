@@ -1,0 +1,41 @@
+name: digitize_art_prototype
+description: MVP prototype for artwork digitization with AR overlay and edge detection
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Camera
+  camera: ^0.10.5+5
+  
+  # Permissions
+  permission_handler: ^11.0.1
+  
+  # Image processing
+  image: ^4.1.3
+  
+  # Edge detection with OpenCV
+  opencv_dart: ^1.0.4
+  
+  # AR and rendering
+  flutter_gl: ^0.0.22
+  
+  # State management
+  provider: ^6.1.1
+  
+  # Utils
+  path_provider: ^2.1.1
+  path: ^1.8.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

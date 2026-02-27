@@ -6,6 +6,7 @@ import '../services/edge_detection_service.dart';
 import '../widgets/ar_overlay.dart';
 import '../widgets/capture_button.dart';
 import 'settings_screen.dart';
+import 'profile_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});

@@ -3,16 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'screens/camera_screen.dart';
 import 'screens/language_selection_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/login_screen.dart';
 import 'services/camera_service.dart';
 import 'services/edge_detection_service.dart';
+import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp();
 
   // Lock to portrait mode
   SystemChrome.setPreferredOrientations([
@@ -39,6 +45,7 @@ class DigitizeArtApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => CameraService()),
         Provider(create: (_) => EdgeDetectionService()),
       ],
@@ -107,16 +114,26 @@ class _InitialScreenState extends State<InitialScreen> {
     final selectedLanguage = prefs.getString('selected_language');
     final onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
 
+    // Check authentication status
+    final authService = context.read<AuthService>();
+    final isAuthenticated = authService.isAuthenticated;
+
     if (mounted) {
       setState(() {
-        if (selectedLanguage == null) {
-          // First launch - show language selection
-          _nextScreen = const LanguageSelectionScreen();
-        } else if (!onboardingComplete) {
-          // Language selected but onboarding not complete
-          _nextScreen = OnboardingScreen(languageCode: selectedLanguage);
+        if (!isAuthenticated) {
+          // Not authenticated - check if need language/onboarding first
+          if (selectedLanguage == null) {
+            // First launch - show language selection
+            _nextScreen = const LanguageSelectionScreen();
+          } else if (!onboardingComplete) {
+            // Language selected but onboarding not complete
+            _nextScreen = OnboardingScreen(languageCode: selectedLanguage);
+          } else {
+            // Setup complete but not logged in - show login
+            _nextScreen = const LoginScreen();
+          }
         } else {
-          // All setup complete - go to camera
+          // Authenticated - go directly to camera
           _nextScreen = const CameraScreen();
         }
         _isLoading = false;

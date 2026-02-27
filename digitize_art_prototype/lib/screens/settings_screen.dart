@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
+import 'profile_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -87,6 +90,40 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
+          // Profile/Account section
+          Consumer<AuthService>(
+            builder: (context, authService, child) {
+              final user = authService.currentUser;
+              if (user != null) {
+                return Container(
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppTheme.secondaryMain,
+                      backgroundImage: user.photoURL != null
+                          ? NetworkImage(user.photoURL!)
+                          : null,
+                      child: user.photoURL == null
+                          ? const Icon(Icons.person, color: Colors.white)
+                          : null,
+                    ),
+                    title: Text(user.displayName ?? 'User'),
+                    subtitle: Text(user.email ?? ''),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ProfileScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+
           // Hero section with logo and website link
           Container(
             margin: const EdgeInsets.all(16),

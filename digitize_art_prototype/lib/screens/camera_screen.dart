@@ -5,6 +5,7 @@ import '../services/camera_service.dart';
 import '../services/edge_detection_service.dart';
 import '../widgets/ar_overlay.dart';
 import '../widgets/capture_button.dart';
+import 'settings_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -169,49 +170,83 @@ class _CameraScreenState extends State<CameraScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Detection status
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _lastDetection?.hasDetection ?? false
+                                  ? Icons.check_circle
+                                  : Icons.search,
+                              color: _lastDetection?.hasDetection ?? false
+                                  ? Colors.green
+                                  : Colors.white,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _lastDetection?.hasDetection ?? false
+                                  ? 'Artwork detected'
+                                  : 'Scanning...',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Camera switch
+                    if (cameraService.cameras.length > 1)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: IconButton(
+                          onPressed: () => cameraService.switchCamera(),
+                          icon: const Icon(
+                            Icons.flip_camera_ios,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+
+                    const SizedBox(width: 8),
+
+                    // Settings button
+                    Container(
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _lastDetection?.hasDetection ?? false
-                                ? Icons.check_circle
-                                : Icons.search,
-                            color: _lastDetection?.hasDetection ?? false
-                                ? Colors.green
-                                : Colors.white,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _lastDetection?.hasDetection ?? false
-                                ? 'Artwork detected'
-                                : 'Scanning...',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
+                      child: IconButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const SettingsScreen(),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Camera switch
-                    if (cameraService.cameras.length > 1)
-                      IconButton(
-                        onPressed: () => cameraService.switchCamera(),
+                          );
+                        },
                         icon: const Icon(
-                          Icons.flip_camera_ios,
+                          Icons.menu,
                           color: Colors.white,
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),

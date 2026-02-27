@@ -69,6 +69,12 @@ class AppLocalizations {
       'edit': 'Edit',
       'share': 'Share',
       'close': 'Close',
+      
+      // Settings
+      'visit_website': 'Visit Website',
+      'about_app': 'About Digitize.art',
+      'contact': 'Contact',
+      'social_media': 'Social Media',
     },
     'fr': {
       'app_name': 'Digitize.art',
@@ -126,6 +132,12 @@ class AppLocalizations {
       'edit': 'Modifier',
       'share': 'Partager',
       'close': 'Fermer',
+      
+      // Settings
+      'visit_website': 'Visiter le Site Web',
+      'about_app': 'À Propos de Digitize.art',
+      'contact': 'Contact',
+      'social_media': 'Réseaux Sociaux',
     },
   };
 

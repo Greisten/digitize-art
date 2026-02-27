@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/digitize-art-logo.png" alt="Digitize.art Logo" width="300"/>
+</p>
+
 # digitize.art 🎨
 
 > Professional artwork digitization in your pocket

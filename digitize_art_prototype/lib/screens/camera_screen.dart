@@ -3,8 +3,10 @@ import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import '../services/camera_service.dart';
 import '../services/edge_detection_service.dart';
+import '../services/lighting_analysis_service.dart';
 import '../widgets/ar_overlay.dart';
 import '../widgets/capture_button.dart';
+import '../widgets/lighting_guidance_overlay.dart';
 import 'settings_screen.dart';
 import 'profile_screen.dart';
 
@@ -18,6 +20,7 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   bool _isDetecting = false;
   EdgeDetectionResult? _lastDetection;
+  LightingAnalysisResult? _lastLightingAnalysis;
 
   @override
   void initState() {
@@ -36,27 +39,34 @@ class _CameraScreenState extends State<CameraScreen> {
   void _startEdgeDetection() {
     final cameraService = context.read<CameraService>();
     final edgeService = context.read<EdgeDetectionService>();
+    final lightingService = LightingAnalysisService();
     
     if (cameraService.controller == null) return;
 
-    // Process frames at ~10 FPS to avoid overwhelming the CPU
+    // Process frames at ~5 FPS to avoid overwhelming the CPU
+    // (slower because we're running two analyses now)
     cameraService.controller!.startImageStream((CameraImage image) async {
       if (_isDetecting) return;
       
       _isDetecting = true;
       
       try {
-        final result = await edgeService.detectEdges(image);
+        // Run both analyses in parallel
+        final results = await Future.wait([
+          edgeService.detectEdges(image),
+          lightingService.analyze(image),
+        ]);
         
         if (mounted) {
           setState(() {
-            _lastDetection = result;
+            _lastDetection = results[0] as EdgeDetectionResult;
+            _lastLightingAnalysis = results[1] as LightingAnalysisResult;
           });
         }
       } catch (e) {
-        debugPrint('Edge detection error: $e');
+        debugPrint('Analysis error: $e');
       } finally {
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 200));
         _isDetecting = false;
       }
     });
@@ -162,6 +172,11 @@ class _CameraScreenState extends State<CameraScreen> {
                 detection: _lastDetection,
               ),
 
+              // Lighting Guidance Overlay
+              LightingGuidanceOverlay(
+                analysis: _lastLightingAnalysis,
+              ),
+
               // Top controls
               Positioned(
                 top: MediaQuery.of(context).padding.top + 16,
@@ -194,13 +209,30 @@ class _CameraScreenState extends State<CameraScreen> {
                               size: 20,
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              _lastDetection?.hasDetection ?? false
-                                  ? 'Artwork detected'
-                                  : 'Scanning...',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _lastDetection?.hasDetection ?? false
+                                        ? 'Artwork detected'
+                                        : 'Scanning...',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (_lastLightingAnalysis != null)
+                                    Text(
+                                      '${(_lastLightingAnalysis!.colorTemperature).round()}K • ${(_lastLightingAnalysis!.overallScore * 100).round()}% quality',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ],
@@ -259,7 +291,8 @@ class _CameraScreenState extends State<CameraScreen> {
                 right: 0,
                 child: CaptureButton(
                   onPressed: _captureImage,
-                  isEnabled: _lastDetection?.hasDetection ?? false,
+                  isEnabled: (_lastDetection?.hasDetection ?? false) &&
+                      (_lastLightingAnalysis?.overallScore ?? 0) >= 0.4,
                 ),
               ),
             ],

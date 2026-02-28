@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class UserModel {
   final String uid;
   final String email;
-  final String? displayName;
+  final String? displayName; // Local display name (mutable)
+  final String artistName; // Immutable artist name (a-z, 1-9 only)
   final String? photoURL;
   final String? phoneNumber;
   final AuthProvider authProvider;
@@ -15,6 +16,7 @@ class UserModel {
     required this.uid,
     required this.email,
     this.displayName,
+    required this.artistName,
     this.photoURL,
     this.phoneNumber,
     required this.authProvider,

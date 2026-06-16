@@ -538,35 +538,40 @@ class LightingAnalysisResult {
 
   /// Get primary issue to display
   String? getPrimaryIssue() {
-    if (hasMotionBlur && blurIntensity > 0.5) return 'Hold camera steady';
-    if (hasGlare && glareIntensity > 0.5) return 'Glare detected - adjust angle';
-    if (hasShadows && shadowIntensity > 0.5) return 'Harsh shadows - adjust lighting';
+    if (hasMotionBlur && blurIntensity > 0.5) return 'Stabilisez l\'appareil';
+    if (hasGlare && glareIntensity > 0.5) return 'Reflets — changez l\'angle';
+    if (hasShadows && shadowIntensity > 0.5) {
+      return 'Ombres dures — ajustez la lumière';
+    }
     if (exposureScore < 0.5) {
-      if (exposureLevel == ExposureLevel.tooDark) return 'Too dark - add light';
-      if (exposureLevel == ExposureLevel.tooLight) return 'Too bright - reduce light';
+      if (exposureLevel == ExposureLevel.tooDark) {
+        return 'Trop sombre — ajoutez de la lumière';
+      }
+      if (exposureLevel == ExposureLevel.tooLight) {
+        return 'Trop clair — réduisez la lumière';
+      }
     }
     if (hasUnevenLighting && uniformityScore < 0.5) {
       return getUniformityGuidance();
     }
     if (colorTempScore < 0.6) {
-      if (colorTemperature < 4000) return 'Lighting too warm (yellow)';
-      if (colorTemperature > 6000) return 'Lighting too cool (blue)';
+      if (colorTemperature < 4000) return 'Lumière trop chaude (jaune)';
+      if (colorTemperature > 6000) return 'Lumière trop froide (bleue)';
     }
     return null;
   }
 
-  /// Directional guidance for uneven lighting (e.g. "Uneven light - brighten
-  /// the left side").
+  /// Directional guidance for uneven lighting.
   String? getUniformityGuidance() {
     switch (unevenHint) {
       case UnevenLightingHint.leftDarker:
-        return 'Uneven light - brighten the left side';
+        return 'Éclairage inégal — éclaircissez la gauche';
       case UnevenLightingHint.rightDarker:
-        return 'Uneven light - brighten the right side';
+        return 'Éclairage inégal — éclaircissez la droite';
       case UnevenLightingHint.topDarker:
-        return 'Uneven light - brighten the top';
+        return 'Éclairage inégal — éclaircissez le haut';
       case UnevenLightingHint.bottomDarker:
-        return 'Uneven light - brighten the bottom';
+        return 'Éclairage inégal — éclaircissez le bas';
       case UnevenLightingHint.none:
         return null;
     }
@@ -576,15 +581,15 @@ class LightingAnalysisResult {
   String unevenSideLabel() {
     switch (unevenHint) {
       case UnevenLightingHint.leftDarker:
-        return 'left darker';
+        return 'gauche sombre';
       case UnevenLightingHint.rightDarker:
-        return 'right darker';
+        return 'droite sombre';
       case UnevenLightingHint.topDarker:
-        return 'top darker';
+        return 'haut sombre';
       case UnevenLightingHint.bottomDarker:
-        return 'bottom darker';
+        return 'bas sombre';
       case UnevenLightingHint.none:
-        return 'uneven';
+        return 'inégal';
     }
   }
 

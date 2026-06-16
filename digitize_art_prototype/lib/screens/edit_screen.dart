@@ -98,7 +98,7 @@ class _EditScreenState extends State<EditScreen> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not save edits: $e'),
+            content: Text('Échec de l\'enregistrement : $e'),
             backgroundColor: AppTheme.errorMain,
           ),
         );
@@ -113,7 +113,7 @@ class _EditScreenState extends State<EditScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Edit scan'),
+        title: const Text('Édition'),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
@@ -126,7 +126,7 @@ class _EditScreenState extends State<EditScreen> {
                       color: Colors.white,
                     ),
                   )
-                : const Text('Save', style: TextStyle(color: Colors.white)),
+                : const Text('Enreg.', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -242,9 +242,9 @@ class _EditScreenState extends State<EditScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _tabButton('Crop', 0, Icons.crop),
+          _tabButton('Recadrer', 0, Icons.crop),
           const SizedBox(width: 8),
-          _tabButton('Adjust', 1, Icons.tune),
+          _tabButton('Ajuster', 1, Icons.tune),
         ],
       ),
     );
@@ -291,14 +291,14 @@ class _EditScreenState extends State<EditScreen> {
       children: [
         const Expanded(
           child: Text(
-            'Drag the corners to the artwork edges',
+            'Placez les coins sur les bords de l\'œuvre',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ),
         TextButton.icon(
           onPressed: _resetCorners,
           icon: const Icon(Icons.restart_alt, color: Colors.white),
-          label: const Text('Reset', style: TextStyle(color: Colors.white)),
+          label: const Text('Réinit.', style: TextStyle(color: Colors.white)),
         ),
       ],
     );
@@ -308,9 +308,9 @@ class _EditScreenState extends State<EditScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _slider('Brightness', _brightness, 0.5, 1.5,
+        _slider('Luminosité', _brightness, 0.5, 1.5,
             (v) => setState(() => _brightness = v)),
-        _slider('Contrast', _contrast, 0.5, 1.5,
+        _slider('Contraste', _contrast, 0.5, 1.5,
             (v) => setState(() => _contrast = v)),
         _slider('Saturation', _saturation, 0.0, 2.0,
             (v) => setState(() => _saturation = v)),
@@ -318,14 +318,14 @@ class _EditScreenState extends State<EditScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             IconButton(
-              tooltip: 'Rotate left',
+              tooltip: 'Pivoter à gauche',
               onPressed: () =>
                   setState(() => _quarterTurns = (_quarterTurns + 3) % 4),
               icon: const Icon(Icons.rotate_left, color: Colors.white),
             ),
             const SizedBox(width: 24),
             IconButton(
-              tooltip: 'Rotate right',
+              tooltip: 'Pivoter à droite',
               onPressed: () =>
                   setState(() => _quarterTurns = (_quarterTurns + 1) % 4),
               icon: const Icon(Icons.rotate_right, color: Colors.white),

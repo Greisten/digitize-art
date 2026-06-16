@@ -113,7 +113,7 @@ class _CameraScreenState extends State<CameraScreen> {
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Scan saved to gallery'),
+          content: Text('Scan enregistré'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -150,7 +150,7 @@ class _CameraScreenState extends State<CameraScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('HDR capture failed: $e'),
+            content: Text('Échec capture HDR : $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -185,7 +185,7 @@ class _CameraScreenState extends State<CameraScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Capture failed: $e'),
+            content: Text('Échec de la capture : $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -227,7 +227,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: () => cameraService.initialize(),
-                    child: const Text('Retry'),
+                    child: const Text('Réessayer'),
                   ),
                 ],
               ),
@@ -312,8 +312,8 @@ class _CameraScreenState extends State<CameraScreen> {
                                 children: [
                                   Text(
                                     _lastDetection?.hasDetection ?? false
-                                        ? 'Artwork detected'
-                                        : 'Scanning...',
+                                        ? 'Œuvre détectée'
+                                        : 'Recherche…',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 14,
@@ -322,7 +322,7 @@ class _CameraScreenState extends State<CameraScreen> {
                                   ),
                                   if (_lastLightingAnalysis != null)
                                     Text(
-                                      '${(_lastLightingAnalysis!.colorTemperature).round()}K • ${(_lastLightingAnalysis!.overallScore * 100).round()}% quality',
+                                      '${(_lastLightingAnalysis!.colorTemperature).round()}K • ${(_lastLightingAnalysis!.overallScore * 100).round()}% qualité',
                                       style: const TextStyle(
                                         color: Colors.white70,
                                         fontSize: 11,
@@ -425,7 +425,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: IconButton(
-                    tooltip: 'My scans',
+                    tooltip: 'Mes scans',
                     onPressed: _isCapturing ? null : _openGallery,
                     icon: const Icon(
                       Icons.photo_library_outlined,
@@ -449,8 +449,8 @@ class _CameraScreenState extends State<CameraScreen> {
                           const SizedBox(height: 16),
                           Text(
                             _hdrMode
-                                ? 'Capturing HDR (3 exposures)…'
-                                : 'Capturing…',
+                                ? 'Capture HDR (3 expositions)…'
+                                : 'Capture…',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,

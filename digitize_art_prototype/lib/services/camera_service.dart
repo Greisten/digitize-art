@@ -20,7 +20,7 @@ class CameraService extends ChangeNotifier {
       // Request camera permission
       final status = await Permission.camera.request();
       if (!status.isGranted) {
-        _error = 'Camera permission denied';
+        _error = 'Accès à la caméra refusé';
         notifyListeners();
         return;
       }
@@ -28,7 +28,7 @@ class CameraService extends ChangeNotifier {
       // Get available cameras
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
-        _error = 'No cameras found';
+        _error = 'Aucune caméra trouvée';
         notifyListeners();
         return;
       }
@@ -56,7 +56,7 @@ class CameraService extends ChangeNotifier {
       _error = null;
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to initialize camera: $e';
+      _error = 'Échec d\'initialisation de la caméra : $e';
       _isInitialized = false;
       notifyListeners();
     }
@@ -91,7 +91,7 @@ class CameraService extends ChangeNotifier {
       
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to switch camera: $e';
+      _error = 'Échec du changement de caméra : $e';
       notifyListeners();
     }
   }

@@ -259,6 +259,13 @@ class LightingGuidanceOverlay extends StatelessWidget {
       details.add('🌑 Harsh shadows');
     }
 
+    // Lighting uniformity
+    if (analysis!.hasUnevenLighting) {
+      details.add('⚖️ Uneven lighting (${analysis!.unevenSideLabel()})');
+    } else {
+      details.add('⚖️ Even lighting');
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

@@ -1,126 +1,136 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// App theme matching digitize.art website design
-/// Colors: Dark brown #33271e, Purple #8640ae, Cream #F5F5F0
-/// Fonts: Space Grotesk (headings), Inter (text)
+/// App theme following the LE LOFT — Studio Créatif brand guidelines.
+/// Colours: Blue #0000EE, Red #EE0000, Yellow #FFE000 on white #FFFFFF with
+/// black #000000 text. Typeface: Montserrat.
 class AppTheme {
-  // Primary colors from digitize.art
-  static const Color primaryMain = Color(0xFF33271E);
-  static const Color primaryLight = Color(0xFF534031);
-  static const Color primaryDark = Color(0xFF130E0B);
-  
-  // Secondary (accent purple)
-  static const Color secondaryMain = Color(0xFF8640AE);
-  static const Color secondaryLight = Color(0xFF9E5DC4);
-  static const Color secondaryDark = Color(0xFF693289);
-  
-  // Accent (cream/beige)
-  static const Color accentMain = Color(0xFFF5F5F0);
-  static const Color accentLight = Color(0xFFFFFFFF);
-  static const Color accentDark = Color(0xFFE1E1D1);
-  
-  // Functional colors
+  // --- LE LOFT brand palette ---
+  static const Color brandBlue = Color(0xFF0000EE);
+  static const Color brandRed = Color(0xFFEE0000);
+  static const Color brandYellow = Color(0xFFFFE000);
+  static const Color brandWhite = Color(0xFFFFFFFF);
+  static const Color brandBlack = Color(0xFF000000);
+
+  // Primary = brand blue (lead interactive colour)
+  static const Color primaryMain = brandBlue;
+  static const Color primaryLight = Color(0xFF4D4DFF);
+  static const Color primaryDark = Color(0xFF0000B3);
+
+  // Secondary accent = brand blue too (keeps interactive elements coherent)
+  static const Color secondaryMain = brandBlue;
+  static const Color secondaryLight = Color(0xFF4D4DFF);
+  static const Color secondaryDark = Color(0xFF0000B3);
+
+  // Surfaces / background (white)
+  static const Color accentMain = brandWhite;
+  static const Color accentLight = brandWhite;
+  static const Color accentDark = Color(0xFFF2F2F2);
+
+  // Functional colours
   static const Color successMain = Color(0xFF26A94C);
-  static const Color errorMain = Color(0xFFED262D);
-  
-  // Text colors
-  static const Color headingColor = Color(0xFF4A3728);
-  static const Color textDarkBg = Color(0xFF9CA3AF);
-  static const Color textDarkBgHeading = Color(0xFFF3F4F6);
+  static const Color errorMain = brandRed; // brand red doubles as error
+
+  // Text colours
+  static const Color headingColor = brandBlack;
+  static const Color textDarkBg = Color(0xFFB5B5B5);
+  static const Color textDarkBgHeading = brandWhite;
+
+  // Dark-theme neutral surfaces
+  static const Color darkBg = Color(0xFF0E0E0E);
+  static const Color darkSurface = Color(0xFF1A1A1A);
 
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      
+
       colorScheme: const ColorScheme.light(
         primary: primaryMain,
         secondary: secondaryMain,
-        tertiary: accentMain,
-        surface: accentLight,
-        background: accentMain,
+        tertiary: brandYellow,
+        surface: brandWhite,
         error: errorMain,
-        onPrimary: Colors.white,
-        onSecondary: Colors.white,
-        onSurface: headingColor,
-        onBackground: headingColor,
+        onPrimary: brandWhite,
+        onSecondary: brandWhite,
+        onTertiary: brandBlack,
+        onSurface: brandBlack,
+        onError: brandWhite,
       ),
-      
-      scaffoldBackgroundColor: accentMain,
-      
-      // Typography - Space Grotesk for headings, Inter for body
+
+      scaffoldBackgroundColor: brandWhite,
+
+      // Typography — Montserrat throughout (bold headings, regular body).
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.spaceGrotesk(
+        displayLarge: GoogleFonts.montserrat(
           fontSize: 57,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: headingColor,
         ),
-        displayMedium: GoogleFonts.spaceGrotesk(
+        displayMedium: GoogleFonts.montserrat(
           fontSize: 45,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: headingColor,
         ),
-        displaySmall: GoogleFonts.spaceGrotesk(
+        displaySmall: GoogleFonts.montserrat(
           fontSize: 36,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: headingColor,
         ),
-        headlineLarge: GoogleFonts.spaceGrotesk(
+        headlineLarge: GoogleFonts.montserrat(
           fontSize: 32,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: headingColor,
         ),
-        headlineMedium: GoogleFonts.spaceGrotesk(
+        headlineMedium: GoogleFonts.montserrat(
           fontSize: 28,
           fontWeight: FontWeight.w600,
           color: headingColor,
         ),
-        headlineSmall: GoogleFonts.spaceGrotesk(
+        headlineSmall: GoogleFonts.montserrat(
           fontSize: 24,
           fontWeight: FontWeight.w600,
           color: headingColor,
         ),
-        titleLarge: GoogleFonts.spaceGrotesk(
+        titleLarge: GoogleFonts.montserrat(
           fontSize: 22,
           fontWeight: FontWeight.w600,
           color: headingColor,
         ),
-        titleMedium: GoogleFonts.spaceGrotesk(
+        titleMedium: GoogleFonts.montserrat(
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: headingColor,
         ),
-        titleSmall: GoogleFonts.spaceGrotesk(
+        titleSmall: GoogleFonts.montserrat(
           fontSize: 14,
           fontWeight: FontWeight.w600,
           color: headingColor,
         ),
-        bodyLarge: GoogleFonts.inter(
+        bodyLarge: GoogleFonts.montserrat(
           fontSize: 16,
           color: headingColor,
         ),
-        bodyMedium: GoogleFonts.inter(
+        bodyMedium: GoogleFonts.montserrat(
           fontSize: 14,
           color: headingColor,
         ),
-        bodySmall: GoogleFonts.inter(
+        bodySmall: GoogleFonts.montserrat(
           fontSize: 12,
           color: headingColor.withOpacity(0.7),
         ),
-        labelLarge: GoogleFonts.spaceGrotesk(
+        labelLarge: GoogleFonts.montserrat(
           fontSize: 14,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
         ),
       ),
-      
-      // Button theme
+
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: secondaryMain,
-          foregroundColor: Colors.white,
-          textStyle: GoogleFonts.spaceGrotesk(
+          foregroundColor: brandWhite,
+          textStyle: GoogleFonts.montserrat(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
@@ -129,15 +139,15 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          elevation: 2,
+          elevation: 0,
         ),
       ),
-      
+
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: secondaryMain,
           side: const BorderSide(color: secondaryMain, width: 2),
-          textStyle: GoogleFonts.spaceGrotesk(
+          textStyle: GoogleFonts.montserrat(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
@@ -148,40 +158,37 @@ class AppTheme {
           ),
         ),
       ),
-      
-      // Card theme
+
       cardTheme: CardTheme(
-        color: accentLight,
-        elevation: 2,
+        color: brandWhite,
+        elevation: 1,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      
-      // AppBar theme
+
       appBarTheme: AppBarTheme(
-        backgroundColor: primaryMain,
-        foregroundColor: Colors.white,
+        backgroundColor: brandWhite,
+        foregroundColor: brandBlack,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.spaceGrotesk(
+        titleTextStyle: GoogleFonts.montserrat(
           fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          color: brandBlack,
         ),
       ),
-      
-      // Input decoration theme
+
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: accentLight,
+        fillColor: brandWhite,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primaryLight),
+          borderSide: const BorderSide(color: Color(0xFFD0D0D0)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primaryLight),
+          borderSide: const BorderSide(color: Color(0xFFD0D0D0)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -193,87 +200,86 @@ class AppTheme {
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
-      
-      // FloatingActionButton theme
+
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: secondaryMain,
-        foregroundColor: Colors.white,
-        elevation: 4,
+        foregroundColor: brandWhite,
+        elevation: 2,
       ),
     );
   }
-  
+
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      
+
       colorScheme: const ColorScheme.dark(
-        primary: secondaryLight,
+        primary: primaryLight,
         secondary: secondaryMain,
-        tertiary: accentMain,
-        surface: primaryDark,
-        background: primaryMain,
+        tertiary: brandYellow,
+        surface: darkSurface,
         error: errorMain,
-        onPrimary: Colors.white,
-        onSecondary: Colors.white,
+        onPrimary: brandWhite,
+        onSecondary: brandWhite,
+        onTertiary: brandBlack,
         onSurface: textDarkBgHeading,
-        onBackground: textDarkBgHeading,
+        onError: brandWhite,
       ),
-      
-      scaffoldBackgroundColor: primaryMain,
-      
+
+      scaffoldBackgroundColor: darkBg,
+
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.spaceGrotesk(
+        displayLarge: GoogleFonts.montserrat(
           fontSize: 57,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: textDarkBgHeading,
         ),
-        displayMedium: GoogleFonts.spaceGrotesk(
+        displayMedium: GoogleFonts.montserrat(
           fontSize: 45,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: textDarkBgHeading,
         ),
-        displaySmall: GoogleFonts.spaceGrotesk(
+        displaySmall: GoogleFonts.montserrat(
           fontSize: 36,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: textDarkBgHeading,
         ),
-        headlineLarge: GoogleFonts.spaceGrotesk(
+        headlineLarge: GoogleFonts.montserrat(
           fontSize: 32,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: textDarkBgHeading,
         ),
-        headlineMedium: GoogleFonts.spaceGrotesk(
+        headlineMedium: GoogleFonts.montserrat(
           fontSize: 28,
           fontWeight: FontWeight.w600,
           color: textDarkBgHeading,
         ),
-        headlineSmall: GoogleFonts.spaceGrotesk(
+        headlineSmall: GoogleFonts.montserrat(
           fontSize: 24,
           fontWeight: FontWeight.w600,
           color: textDarkBgHeading,
         ),
-        titleLarge: GoogleFonts.spaceGrotesk(
+        titleLarge: GoogleFonts.montserrat(
           fontSize: 22,
           fontWeight: FontWeight.w600,
           color: textDarkBgHeading,
         ),
-        bodyLarge: GoogleFonts.inter(
+        bodyLarge: GoogleFonts.montserrat(
           fontSize: 16,
           color: textDarkBg,
         ),
-        bodyMedium: GoogleFonts.inter(
+        bodyMedium: GoogleFonts.montserrat(
           fontSize: 14,
           color: textDarkBg,
         ),
       ),
-      
+
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: secondaryMain,
-          foregroundColor: Colors.white,
-          textStyle: GoogleFonts.spaceGrotesk(
+          foregroundColor: brandWhite,
+          textStyle: GoogleFonts.montserrat(
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
@@ -283,13 +289,13 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       appBarTheme: AppBarTheme(
-        backgroundColor: primaryDark,
+        backgroundColor: darkBg,
         foregroundColor: textDarkBgHeading,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.spaceGrotesk(
+        titleTextStyle: GoogleFonts.montserrat(
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: textDarkBgHeading,

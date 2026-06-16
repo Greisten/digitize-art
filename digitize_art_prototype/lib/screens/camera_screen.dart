@@ -8,6 +8,7 @@ import '../services/lighting_analysis_service.dart';
 import '../widgets/ar_overlay.dart';
 import '../widgets/capture_button.dart';
 import '../widgets/lighting_guidance_overlay.dart';
+import '../theme/app_theme.dart';
 import 'gallery_screen.dart';
 import 'review_screen.dart';
 import 'settings_screen.dart';
@@ -349,7 +350,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     Container(
                       decoration: BoxDecoration(
                         color: _hdrMode
-                            ? Colors.green.withOpacity(0.85)
+                            ? AppTheme.secondaryMain.withOpacity(0.9)
                             : Colors.black54,
                         borderRadius: BorderRadius.circular(20),
                       ),

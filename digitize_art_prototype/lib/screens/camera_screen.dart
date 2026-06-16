@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:provider/provider.dart';
 import '../services/camera_service.dart';
 import '../services/edge_detection_service.dart';
@@ -125,6 +126,41 @@ class _CameraScreenState extends State<CameraScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const GalleryScreen()),
     );
+    if (mounted) _startEdgeDetection();
+  }
+
+  /// Launch the native AI document scanner (VisionKit on iOS / ML Kit on
+  /// Android): automatic edge detection + perspective crop. The cropped result
+  /// is routed to the review screen like a normal capture.
+  Future<void> _scanWithAI() async {
+    if (_isCapturing) return;
+    setState(() => _isCapturing = true);
+    // Release our camera session before the native scanner takes over.
+    _stopEdgeDetection();
+
+    String? path;
+    try {
+      final pictures =
+          await CunningDocumentScanner.getPictures(noOfPages: 1);
+      if (pictures != null && pictures.isNotEmpty) {
+        path = pictures.first;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Scan IA indisponible : $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
+    }
+
+    if (mounted && path != null) {
+      await _openReview(path, isHdr: false);
+    }
     if (mounted) _startEdgeDetection();
   }
 
@@ -433,6 +469,41 @@ class _CameraScreenState extends State<CameraScreen> {
                       size: 28,
                     ),
                   ),
+                ),
+              ),
+
+              // AI auto-scan (VisionKit) — bottom-right
+              Positioned(
+                bottom: MediaQuery.of(context).padding.bottom + 40,
+                right: 24,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryMain,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: IconButton(
+                        tooltip: 'Scan auto (IA)',
+                        onPressed: _isCapturing ? null : _scanWithAI,
+                        icon: const Icon(
+                          Icons.document_scanner_outlined,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'IA',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 

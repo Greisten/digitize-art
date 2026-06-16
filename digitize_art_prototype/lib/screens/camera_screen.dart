@@ -3,12 +3,14 @@ import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import '../services/camera_service.dart';
 import '../services/edge_detection_service.dart';
+import '../services/hdr_capture_service.dart';
 import '../services/lighting_analysis_service.dart';
 import '../widgets/ar_overlay.dart';
 import '../widgets/capture_button.dart';
 import '../widgets/lighting_guidance_overlay.dart';
+import 'gallery_screen.dart';
+import 'review_screen.dart';
 import 'settings_screen.dart';
-import 'profile_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -21,6 +23,10 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isDetecting = false;
   EdgeDetectionResult? _lastDetection;
   LightingAnalysisResult? _lastLightingAnalysis;
+
+  bool _hdrMode = false;
+  bool _isCapturing = false;
+  final HdrCaptureService _hdrService = HdrCaptureService();
 
   @override
   void initState() {
@@ -41,19 +47,24 @@ class _CameraScreenState extends State<CameraScreen> {
     final edgeService = context.read<EdgeDetectionService>();
     final lightingService = LightingAnalysisService();
     
-    if (cameraService.controller == null) return;
+    final controller = cameraService.controller;
+    if (controller == null) return;
+    // Avoid starting a second stream if one is already running.
+    if (controller.value.isStreamingImages) return;
+
+    final sensorOrientation = controller.description.sensorOrientation;
 
     // Process frames at ~5 FPS to avoid overwhelming the CPU
     // (slower because we're running two analyses now)
-    cameraService.controller!.startImageStream((CameraImage image) async {
+    controller.startImageStream((CameraImage image) async {
       if (_isDetecting) return;
-      
+
       _isDetecting = true;
-      
+
       try {
         // Run both analyses in parallel
         final results = await Future.wait([
-          edgeService.detectEdges(image),
+          edgeService.detectEdges(image, sensorOrientation: sensorOrientation),
           lightingService.analyze(image),
         ]);
         
@@ -74,34 +85,101 @@ class _CameraScreenState extends State<CameraScreen> {
 
   void _stopEdgeDetection() {
     final cameraService = context.read<CameraService>();
-    cameraService.controller?.stopImageStream();
+    final controller = cameraService.controller;
+    // Only stop if a stream is actually running, otherwise the plugin throws.
+    if (controller != null && controller.value.isStreamingImages) {
+      controller.stopImageStream();
+    }
+  }
+
+  Future<void> _onCapturePressed() async {
+    if (_isCapturing) return;
+    if (_hdrMode) {
+      await _captureHdr();
+    } else {
+      await _captureImage();
+    }
+  }
+
+  /// Push the review screen for a freshly captured image, then surface a
+  /// confirmation if the user saved it.
+  Future<void> _openReview(String path, {required bool isHdr}) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ReviewScreen(imagePath: path, isHdr: isHdr),
+      ),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Scan saved to gallery'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openGallery() async {
+    _stopEdgeDetection();
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const GalleryScreen()),
+    );
+    if (mounted) _startEdgeDetection();
+  }
+
+  Future<void> _captureHdr() async {
+    final cameraService = context.read<CameraService>();
+    final controller = cameraService.controller;
+
+    if (controller == null || !cameraService.isInitialized) {
+      return;
+    }
+
+    setState(() => _isCapturing = true);
+    // Stop the live analysis stream while we take the bracketed shots.
+    _stopEdgeDetection();
+
+    String? path;
+    bool isHdr = false;
+    try {
+      final result = await _hdrService.captureHdr(controller);
+      path = result.path;
+      isHdr = result.fused;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('HDR capture failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
+    }
+
+    if (mounted && path != null) {
+      await _openReview(path, isHdr: isHdr);
+    }
+    if (mounted) _startEdgeDetection();
   }
 
   Future<void> _captureImage() async {
     final cameraService = context.read<CameraService>();
-    
-    if (cameraService.controller == null || !cameraService.isInitialized) {
+    final controller = cameraService.controller;
+
+    if (controller == null || !cameraService.isInitialized) {
       return;
     }
 
+    setState(() => _isCapturing = true);
+    // Stop detection during capture.
+    _stopEdgeDetection();
+
+    String? path;
     try {
-      // Stop detection during capture
-      _stopEdgeDetection();
-      
-      final image = await cameraService.controller!.takePicture();
-      
-      if (mounted) {
-        // Show success feedback
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Image captured: ${image.path}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-      
-      // Resume detection
-      _startEdgeDetection();
+      final image = await controller.takePicture();
+      path = image.path;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -111,7 +189,14 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
     }
+
+    if (mounted && path != null) {
+      await _openReview(path, isHdr: false);
+    }
+    if (mounted) _startEdgeDetection();
   }
 
   @override
@@ -260,6 +345,28 @@ class _CameraScreenState extends State<CameraScreen> {
 
                     const SizedBox(width: 8),
 
+                    // HDR multi-shot toggle
+                    Container(
+                      decoration: BoxDecoration(
+                        color: _hdrMode
+                            ? Colors.green.withOpacity(0.85)
+                            : Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: IconButton(
+                        tooltip: 'HDR multi-shot',
+                        onPressed: _isCapturing
+                            ? null
+                            : () => setState(() => _hdrMode = !_hdrMode),
+                        icon: const Icon(
+                          Icons.hdr_on,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+
                     // Settings button
                     Container(
                       decoration: BoxDecoration(
@@ -290,11 +397,59 @@ class _CameraScreenState extends State<CameraScreen> {
                 left: 0,
                 right: 0,
                 child: CaptureButton(
-                  onPressed: _captureImage,
-                  isEnabled: (_lastDetection?.hasDetection ?? false) &&
+                  onPressed: _onCapturePressed,
+                  isEnabled: !_isCapturing &&
+                      (_lastDetection?.hasDetection ?? false) &&
                       (_lastLightingAnalysis?.overallScore ?? 0) >= 0.4,
                 ),
               ),
+
+              // Gallery shortcut (bottom-left)
+              Positioned(
+                bottom: MediaQuery.of(context).padding.bottom + 40,
+                left: 24,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: IconButton(
+                    tooltip: 'My scans',
+                    onPressed: _isCapturing ? null : _openGallery,
+                    icon: const Icon(
+                      Icons.photo_library_outlined,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Capture progress overlay
+              if (_isCapturing)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black54,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(color: Colors.white),
+                          const SizedBox(height: 16),
+                          Text(
+                            _hdrMode
+                                ? 'Capturing HDR (3 exposures)…'
+                                : 'Capturing…',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },

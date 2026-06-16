@@ -26,6 +26,8 @@ class EdgeDetectionService {
     cv.Mat? gray;
     cv.Mat? blurred;
     cv.Mat? edges;
+    cv.Mat? kernel;
+    cv.Mat? dilated;
     cv.Contours? contours;
     cv.VecVec4i? hierarchy;
 
@@ -40,10 +42,15 @@ class EdgeDetectionService {
         luma.data,
       );
       blurred = cv.gaussianBlur(gray, (5, 5), 0);
-      edges = cv.canny(blurred, 60, 160);
+      edges = cv.canny(blurred, 50, 150);
+
+      // Close small gaps in the edges so the artwork outline forms a single
+      // contour (Canny alone tends to leave breaks).
+      kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
+      dilated = cv.dilate(edges, kernel, iterations: 1);
 
       final found = cv.findContours(
-        edges,
+        dilated,
         cv.RETR_EXTERNAL,
         cv.CHAIN_APPROX_SIMPLE,
       );
@@ -53,30 +60,46 @@ class EdgeDetectionService {
       final double frameArea = (luma.width * luma.height).toDouble();
       final double minArea = frameArea * _minAreaRatio;
 
+      // Pick the largest contour above the size floor.
       double bestArea = 0;
-      List<Corner>? bestQuad;
-
+      int bestIndex = -1;
       for (int i = 0; i < contours.length; i++) {
-        final contour = contours[i];
-        final double area = cv.contourArea(contour);
-        if (area < minArea || area <= bestArea) continue;
-
-        final double peri = cv.arcLength(contour, true);
-        final approx = cv.approxPolyDP(contour, 0.02 * peri, true);
-        if (approx.length == 4) {
+        final double area = cv.contourArea(contours[i]);
+        if (area >= minArea && area > bestArea) {
           bestArea = area;
-          bestQuad = [
-            for (int j = 0; j < 4; j++)
-              Corner(approx[j].x / luma.width, approx[j].y / luma.height),
-          ];
+          bestIndex = i;
         }
-        approx.dispose();
       }
 
-      if (bestQuad == null) return EdgeDetectionResult.empty();
+      if (bestIndex < 0) return EdgeDetectionResult.empty();
+
+      final contour = contours[bestIndex];
+      final double peri = cv.arcLength(contour, true);
+      final approx = cv.approxPolyDP(contour, 0.02 * peri, true);
+
+      List<Corner> quad;
+      if (approx.length == 4) {
+        // Clean quadrilateral.
+        quad = [
+          for (int j = 0; j < 4; j++)
+            Corner(approx[j].x / luma.width, approx[j].y / luma.height),
+        ];
+      } else {
+        // Fallback: minimum-area rotated rectangle around the largest object,
+        // so we still report a usable quad when the outline isn't a clean 4-gon.
+        final rotated = cv.minAreaRect(contour);
+        final pts = rotated.points;
+        quad = [
+          for (int j = 0; j < 4; j++)
+            Corner(pts[j].x / luma.width, pts[j].y / luma.height),
+        ];
+        pts.dispose();
+        rotated.dispose();
+      }
+      approx.dispose();
 
       final corners = _orderCorners(
-        bestQuad.map((c) => _rotate(c, sensorOrientation)).toList(),
+        quad.map((c) => _rotate(c, sensorOrientation)).toList(),
       );
       final confidence = (bestArea / frameArea).clamp(0.0, 1.0);
 
@@ -91,6 +114,8 @@ class EdgeDetectionService {
       gray?.dispose();
       blurred?.dispose();
       edges?.dispose();
+      kernel?.dispose();
+      dilated?.dispose();
       contours?.dispose();
       hierarchy?.dispose();
     }

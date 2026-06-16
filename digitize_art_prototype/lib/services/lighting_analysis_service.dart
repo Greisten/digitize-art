@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
 import 'dart:math' as math;
@@ -19,6 +18,7 @@ class LightingAnalysisService {
       final blur = _detectMotionBlur(rgbImage);
       final glare = _detectGlare(rgbImage);
       final shadows = _detectShadows(rgbImage);
+      final uniformity = _analyzeUniformity(rgbImage);
 
       return LightingAnalysisResult(
         exposureLevel: exposure.level,
@@ -34,10 +34,14 @@ class LightingAnalysisService {
         glareIntensity: glare.intensity,
         hasShadows: shadows.detected,
         shadowIntensity: shadows.intensity,
+        uniformityScore: uniformity.score,
+        hasUnevenLighting: uniformity.detected,
+        unevenHint: uniformity.hint,
         overallScore: _calculateOverallScore(
           exposure.score,
           colorTemp.score,
           position.score,
+          uniformity.score,
           blur.intensity,
           glare.intensity,
           shadows.intensity,
@@ -102,7 +106,7 @@ class LightingAnalysisService {
 
   /// Analyze color temperature (white balance)
   _ColorTempAnalysis _analyzeColorTemperature(img.Image image) {
-    int totalR = 0, totalG = 0, totalB = 0;
+    int totalR = 0, totalB = 0;
     int sampleCount = 0;
 
     // Sample center region (assume artwork is centered)
@@ -115,14 +119,12 @@ class LightingAnalysisService {
       for (int x = startX; x < endX; x += 4) {
         final pixel = image.getPixel(x, y);
         totalR += pixel.r.toInt();
-        totalG += pixel.g.toInt();
         totalB += pixel.b.toInt();
         sampleCount++;
       }
     }
 
     final avgR = totalR / sampleCount;
-    final avgG = totalG / sampleCount;
     final avgB = totalB / sampleCount;
 
     // Estimate color temperature using simplified McCamy formula
@@ -324,20 +326,103 @@ class LightingAnalysisService {
     return _ShadowAnalysis(detected: detected, intensity: intensity);
   }
 
+  /// Analyze lighting uniformity across the artwork using a 3x3 zone grid.
+  ///
+  /// Flags lighting that is brighter on one side than the other (a gradient
+  /// the simpler glare/shadow checks would miss) and reports which side is
+  /// darker so the user can even it out.
+  _UniformityAnalysis _analyzeUniformity(img.Image image) {
+    final startX = (image.width * 0.05).round();
+    final endX = (image.width * 0.95).round();
+    final startY = (image.height * 0.05).round();
+    final endY = (image.height * 0.95).round();
+    final regionW = endX - startX;
+    final regionH = endY - startY;
+
+    if (regionW <= 3 || regionH <= 3) {
+      return _UniformityAnalysis(
+        score: 1.0,
+        detected: false,
+        hint: UnevenLightingHint.none,
+      );
+    }
+
+    final zoneSums = List<double>.filled(9, 0);
+    final zoneCounts = List<int>.filled(9, 0);
+
+    for (int y = startY; y < endY; y += 3) {
+      final zy = (((y - startY) * 3) ~/ regionH).clamp(0, 2);
+      for (int x = startX; x < endX; x += 3) {
+        final zx = (((x - startX) * 3) ~/ regionW).clamp(0, 2);
+        final pixel = image.getPixel(x, y);
+        final brightness = (pixel.r + pixel.g + pixel.b) / 3;
+        final idx = zy * 3 + zx;
+        zoneSums[idx] += brightness;
+        zoneCounts[idx]++;
+      }
+    }
+
+    final zoneMeans = List<double>.generate(
+      9,
+      (i) => zoneCounts[i] > 0 ? zoneSums[i] / zoneCounts[i] : 0.0,
+    );
+
+    final maxMean = zoneMeans.reduce(math.max);
+    final minMean = zoneMeans.reduce(math.min);
+    final avg = zoneMeans.reduce((a, b) => a + b) / 9;
+
+    if (avg <= 0) {
+      return _UniformityAnalysis(
+        score: 1.0,
+        detected: false,
+        hint: UnevenLightingHint.none,
+      );
+    }
+
+    // Relative spread: 0 = perfectly even, ~0.5+ = strongly uneven.
+    final spread = (maxMean - minMean) / avg;
+    final score = (1 - spread / 0.5).clamp(0.0, 1.0);
+    final detected = spread > 0.25;
+
+    // Dominant gradient direction (which side is darker).
+    final leftMean = (zoneMeans[0] + zoneMeans[3] + zoneMeans[6]) / 3;
+    final rightMean = (zoneMeans[2] + zoneMeans[5] + zoneMeans[8]) / 3;
+    final topMean = (zoneMeans[0] + zoneMeans[1] + zoneMeans[2]) / 3;
+    final bottomMean = (zoneMeans[6] + zoneMeans[7] + zoneMeans[8]) / 3;
+    final hDiff = leftMean - rightMean;
+    final vDiff = topMean - bottomMean;
+
+    var hint = UnevenLightingHint.none;
+    if (detected) {
+      if (hDiff.abs() >= vDiff.abs()) {
+        hint = hDiff < 0
+            ? UnevenLightingHint.leftDarker
+            : UnevenLightingHint.rightDarker;
+      } else {
+        hint = vDiff < 0
+            ? UnevenLightingHint.topDarker
+            : UnevenLightingHint.bottomDarker;
+      }
+    }
+
+    return _UniformityAnalysis(score: score, detected: detected, hint: hint);
+  }
+
   /// Calculate overall quality score
   double _calculateOverallScore(
     double exposureScore,
     double colorTempScore,
     double positionScore,
+    double uniformityScore,
     double blurIntensity,
     double glareIntensity,
     double shadowIntensity,
   ) {
-    // Weighted average with penalties
-    final baseScore = (exposureScore * 0.3 +
-            colorTempScore * 0.25 +
-            positionScore * 0.25) /
-        0.8;
+    // Weighted average with penalties (weights sum to 1.0).
+    final baseScore = exposureScore * 0.3 +
+        colorTempScore * 0.2 +
+        positionScore * 0.2 +
+        uniformityScore * 0.3;
 
     final penalties = (blurIntensity * 0.3 +
         glareIntensity * 0.2 +
@@ -442,6 +527,18 @@ class _ShadowAnalysis {
   _ShadowAnalysis({required this.detected, required this.intensity});
 }
 
+class _UniformityAnalysis {
+  final double score;
+  final bool detected;
+  final UnevenLightingHint hint;
+
+  _UniformityAnalysis({
+    required this.score,
+    required this.detected,
+    required this.hint,
+  });
+}
+
 // Result classes
 class LightingAnalysisResult {
   final ExposureLevel exposureLevel;
@@ -457,6 +554,9 @@ class LightingAnalysisResult {
   final double glareIntensity;
   final bool hasShadows;
   final double shadowIntensity;
+  final double uniformityScore;
+  final bool hasUnevenLighting;
+  final UnevenLightingHint unevenHint;
   final double overallScore;
 
   LightingAnalysisResult({
@@ -473,6 +573,9 @@ class LightingAnalysisResult {
     required this.glareIntensity,
     required this.hasShadows,
     required this.shadowIntensity,
+    required this.uniformityScore,
+    required this.hasUnevenLighting,
+    required this.unevenHint,
     required this.overallScore,
   });
 
@@ -491,6 +594,9 @@ class LightingAnalysisResult {
       glareIntensity: 0.0,
       hasShadows: false,
       shadowIntensity: 0.0,
+      uniformityScore: 1.0,
+      hasUnevenLighting: false,
+      unevenHint: UnevenLightingHint.none,
       overallScore: 1.0,
     );
   }
@@ -504,11 +610,47 @@ class LightingAnalysisResult {
       if (exposureLevel == ExposureLevel.tooDark) return 'Too dark - add light';
       if (exposureLevel == ExposureLevel.tooLight) return 'Too bright - reduce light';
     }
+    if (hasUnevenLighting && uniformityScore < 0.5) {
+      return getUniformityGuidance();
+    }
     if (colorTempScore < 0.6) {
       if (colorTemperature < 4000) return 'Lighting too warm (yellow)';
       if (colorTemperature > 6000) return 'Lighting too cool (blue)';
     }
     return null;
+  }
+
+  /// Directional guidance for uneven lighting (e.g. "Uneven light - brighten
+  /// the left side").
+  String? getUniformityGuidance() {
+    switch (unevenHint) {
+      case UnevenLightingHint.leftDarker:
+        return 'Uneven light - brighten the left side';
+      case UnevenLightingHint.rightDarker:
+        return 'Uneven light - brighten the right side';
+      case UnevenLightingHint.topDarker:
+        return 'Uneven light - brighten the top';
+      case UnevenLightingHint.bottomDarker:
+        return 'Uneven light - brighten the bottom';
+      case UnevenLightingHint.none:
+        return null;
+    }
+  }
+
+  /// Short label of which side is darker, for compact display.
+  String unevenSideLabel() {
+    switch (unevenHint) {
+      case UnevenLightingHint.leftDarker:
+        return 'left darker';
+      case UnevenLightingHint.rightDarker:
+        return 'right darker';
+      case UnevenLightingHint.topDarker:
+        return 'top darker';
+      case UnevenLightingHint.bottomDarker:
+        return 'bottom darker';
+      case UnevenLightingHint.none:
+        return 'uneven';
+    }
   }
 
   /// Get positioning guidance
@@ -559,4 +701,12 @@ enum QualityRating {
   good,
   fair,
   poor,
+}
+
+enum UnevenLightingHint {
+  none,
+  leftDarker,
+  rightDarker,
+  topDarker,
+  bottomDarker,
 }

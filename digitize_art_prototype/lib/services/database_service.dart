@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class DatabaseService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Lazy so constructing the service doesn't require Firebase to be
+  // initialized (lets demo mode run without backend config).
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   // Collection references
   CollectionReference get _usersCollection => _firestore.collection('users');
@@ -94,7 +96,7 @@ class DatabaseService {
   Future<int> getUsersCount() async {
     try {
       final querySnapshot = await _usersCollection.count().get();
-      return querySnapshot.count;
+      return querySnapshot.count ?? 0;
     } catch (e) {
       debugPrint('Error getting users count: $e');
       return 0;

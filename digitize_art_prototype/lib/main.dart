@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'screens/camera_screen.dart';
 import 'screens/language_selection_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -14,11 +15,18 @@ import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
 
+/// Demo mode (build with `--dart-define=DEMO=true`) skips Firebase and goes
+/// straight to the camera, so the capture/detection/editor/gallery features
+/// can be tested on a device without any backend configuration.
+const bool kDemoMode = bool.fromEnvironment('DEMO');
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
+  // Initialize Firebase (skipped in demo mode).
+  if (!kDemoMode) {
+    await Firebase.initializeApp();
+  }
 
   // Lock to portrait mode
   SystemChrome.setPreferredOrientations([
@@ -110,6 +118,17 @@ class _InitialScreenState extends State<InitialScreen> {
   Future<void> _determineInitialRoute() async {
     await Future.delayed(const Duration(milliseconds: 500)); // Splash delay
 
+    // Demo mode: skip auth/onboarding and go straight to the camera.
+    if (kDemoMode) {
+      if (mounted) {
+        setState(() {
+          _nextScreen = const CameraScreen();
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final selectedLanguage = prefs.getString('selected_language');
     final onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
@@ -145,50 +164,59 @@ class _InitialScreenState extends State<InitialScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        body: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppTheme.primaryMain,
-                AppTheme.primaryDark,
-                AppTheme.secondaryDark,
-              ],
-            ),
-          ),
-          child: Center(
+        backgroundColor: AppTheme.brandWhite,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo with hero animation
+                // LE LOFT logo with hero animation
                 Hero(
                   tag: 'app_logo',
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Image.asset(
-                      'assets/logo/digitize-art-logo.png',
-                      height: 120,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Icon(
-                          Icons.camera_alt_outlined,
-                          size: 120,
-                          color: Colors.white,
-                        );
-                      },
-                    ),
+                  child: Image.asset(
+                    'assets/logo/leloft-logo.png',
+                    height: 130,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.camera_alt_outlined,
+                        size: 120,
+                        color: AppTheme.primaryMain,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  'Digitize.art',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.brandBlack,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Digitize your artworks like a pro',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    color: AppTheme.brandBlack,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'by Le Loft Studio Créatif',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.primaryMain,
                   ),
                 ),
                 const SizedBox(height: 40),
-                // Loading indicator
                 const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryMain),
                 ),
               ],
             ),

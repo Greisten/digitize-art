@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -64,17 +65,37 @@ Uint8List _applyEdits(EditParams params) {
   if (image == null) return params.bytes;
   image = img.bakeOrientation(image);
 
-  // Perspective correction / crop: rectify the user quad to the full frame.
+  // Perspective correction / crop. Rectify the user quad to a rectangle whose
+  // size matches the quad's own edge lengths, so the artwork keeps its real
+  // proportions instead of being stretched to fill the whole source frame.
   if (params.corners.length == 8 && !_isFullFrame(params.corners)) {
     final int w = image.width;
     final int h = image.height;
     final c = params.corners;
+
+    final double tlx = c[0] * w, tly = c[1] * h;
+    final double trx = c[2] * w, tryy = c[3] * h;
+    final double brx = c[4] * w, bry = c[5] * h;
+    final double blx = c[6] * w, bly = c[7] * h;
+
+    double dist(double ax, double ay, double bx, double by) =>
+        math.sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by));
+
+    final double topLen = dist(tlx, tly, trx, tryy);
+    final double bottomLen = dist(blx, bly, brx, bry);
+    final double leftLen = dist(tlx, tly, blx, bly);
+    final double rightLen = dist(trx, tryy, brx, bry);
+
+    final int outW = math.max(1, ((topLen + bottomLen) / 2).round());
+    final int outH = math.max(1, ((leftLen + rightLen) / 2).round());
+
     image = img.copyRectify(
       image,
-      topLeft: img.Point(c[0] * w, c[1] * h),
-      topRight: img.Point(c[2] * w, c[3] * h),
-      bottomRight: img.Point(c[4] * w, c[5] * h),
-      bottomLeft: img.Point(c[6] * w, c[7] * h),
+      topLeft: img.Point(tlx, tly),
+      topRight: img.Point(trx, tryy),
+      bottomRight: img.Point(brx, bry),
+      bottomLeft: img.Point(blx, bly),
+      toImage: img.Image(width: outW, height: outH),
     );
   }
 

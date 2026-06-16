@@ -14,7 +14,7 @@ class EdgeDetectionService {
   static const int _targetWidth = 160;
 
   /// Minimum confidence before we report a usable detection.
-  static const double _detectionThreshold = 0.55;
+  static const double _detectionThreshold = 0.45;
 
   /// Minimum average gradient magnitude for a frame to contain a real subject.
   /// Flat/dark/blank scenes fall below this and report no detection (avoids

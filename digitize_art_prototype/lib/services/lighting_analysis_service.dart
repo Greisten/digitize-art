@@ -346,8 +346,10 @@ class LightingAnalysisService {
           score: 1.0, detected: false, hint: UnevenLightingHint.none);
     }
     final spread = (maxMean - minMean) / avg;
-    final score = (1 - spread / 0.5).clamp(0.0, 1.0);
-    final detected = spread > 0.25;
+    final score = (1 - spread / 0.7).clamp(0.0, 1.0);
+    // Require both a meaningful relative spread AND an absolute brightness
+    // difference, so a roughly-even wall (mild lens vignetting) doesn't trigger.
+    final detected = spread > 0.45 && (maxMean - minMean) > 30;
 
     final leftMean = (zoneMeans[0] + zoneMeans[3] + zoneMeans[6]) / 3;
     final rightMean = (zoneMeans[2] + zoneMeans[5] + zoneMeans[8]) / 3;

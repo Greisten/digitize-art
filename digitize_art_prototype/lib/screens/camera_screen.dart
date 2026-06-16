@@ -245,11 +245,21 @@ class _CameraScreenState extends State<CameraScreen> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              // Camera preview
-              Center(
-                child: AspectRatio(
-                  aspectRatio: controller.value.aspectRatio,
-                  child: CameraPreview(controller),
+              // Camera preview (fullscreen, no distortion).
+              // previewSize is in the sensor's landscape orientation, so we
+              // swap width/height for the portrait view and cover-fit it.
+              Positioned.fill(
+                child: ClipRect(
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: controller.value.previewSize?.height ??
+                          MediaQuery.of(context).size.width,
+                      height: controller.value.previewSize?.width ??
+                          MediaQuery.of(context).size.height,
+                      child: CameraPreview(controller),
+                    ),
+                  ),
                 ),
               ),
 

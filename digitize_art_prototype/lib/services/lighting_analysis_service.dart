@@ -1,24 +1,30 @@
-import 'package:camera/camera.dart';
-import 'package:image/image.dart' as img;
+import 'dart:typed_data';
 import 'dart:math' as math;
+import 'package:camera/camera.dart';
 
+/// Analyzes a live camera frame for lighting quality, positioning and issues.
+///
+/// Works directly on the luma (Y) plane of the camera frame, which exists on
+/// both Android and iOS. (The previous full YUV->RGB conversion assumed an
+/// Android-only 3-plane layout and silently failed on iOS, making the analysis
+/// fall back to default "perfect" values regardless of the scene.) Color
+/// temperature is estimated from the chroma plane(s), handling both the Android
+/// (separate U/V planes) and iOS (interleaved CbCr) layouts.
 class LightingAnalysisService {
-  /// Analyze camera frame for lighting quality, positioning, and issues
+  static const int _targetWidth = 160;
+
   Future<LightingAnalysisResult> analyze(CameraImage image) async {
     try {
-      final rgbImage = _convertYUV420ToImage(image);
-      if (rgbImage == null) {
-        return LightingAnalysisResult.empty();
-      }
+      final luma = _downsampleLuma(image);
+      if (luma == null) return LightingAnalysisResult.empty();
 
-      // Run all analyses
-      final exposure = _analyzeExposure(rgbImage);
-      final colorTemp = _analyzeColorTemperature(rgbImage);
-      final position = _analyzePosition(rgbImage);
-      final blur = _detectMotionBlur(rgbImage);
-      final glare = _detectGlare(rgbImage);
-      final shadows = _detectShadows(rgbImage);
-      final uniformity = _analyzeUniformity(rgbImage);
+      final exposure = _analyzeExposure(luma);
+      final colorTemp = _analyzeColorTemperature(image);
+      final position = _analyzePosition(luma);
+      final blur = _detectMotionBlur(luma);
+      final glare = _detectGlare(luma);
+      final shadows = _detectShadows(luma);
+      final uniformity = _analyzeUniformity(luma);
 
       return LightingAnalysisResult(
         exposureLevel: exposure.level,
@@ -52,90 +58,127 @@ class LightingAnalysisService {
     }
   }
 
-  /// Analyze exposure levels (histogram-based)
-  _ExposureAnalysis _analyzeExposure(img.Image image) {
-    final histogram = List<int>.filled(256, 0);
-    int totalPixels = 0;
+  /// Downsample the luma (Y) plane to a small grayscale buffer.
+  _Luma? _downsampleLuma(CameraImage image) {
+    if (image.planes.isEmpty) return null;
+    final plane = image.planes[0];
+    final bytes = plane.bytes;
+    final int rowStride = plane.bytesPerRow;
+    final int pixelStride = plane.bytesPerPixel ?? 1;
+    final int sw = image.width;
+    final int sh = image.height;
+    if (sw <= 0 || sh <= 0) return null;
 
-    // Build brightness histogram
-    for (int y = 0; y < image.height; y++) {
-      for (int x = 0; x < image.width; x++) {
-        final pixel = image.getPixel(x, y);
-        final brightness = ((pixel.r + pixel.g + pixel.b) / 3).round();
-        histogram[brightness]++;
-        totalPixels++;
+    final double scale = sw / _targetWidth;
+    if (scale <= 0) return null;
+    final int dw = _targetWidth;
+    final int dh = math.max(1, (sh / scale).round());
+    final data = Uint8List(dw * dh);
+
+    for (int dy = 0; dy < dh; dy++) {
+      final int sy = (dy * scale).floor().clamp(0, sh - 1);
+      final int rowBase = sy * rowStride;
+      final int dstBase = dy * dw;
+      for (int dx = 0; dx < dw; dx++) {
+        final int sx = (dx * scale).floor().clamp(0, sw - 1);
+        data[dstBase + dx] = bytes[rowBase + sx * pixelStride];
       }
     }
+    return _Luma(data, dw, dh);
+  }
 
-    // Calculate statistics
+  /// Exposure from the luma histogram.
+  _ExposureAnalysis _analyzeExposure(_Luma luma) {
+    final data = luma.data;
+    final histogram = List<int>.filled(256, 0);
+    for (int i = 0; i < data.length; i++) {
+      histogram[data[i]]++;
+    }
+    final total = data.length;
+
     int sum = 0;
     for (int i = 0; i < 256; i++) {
       sum += histogram[i] * i;
     }
-    final mean = sum / totalPixels;
+    final mean = sum / total;
 
-    // Count underexposed and overexposed pixels
-    final underexposed = histogram.sublist(0, 30).reduce((a, b) => a + b);
-    final overexposed = histogram.sublist(226, 256).reduce((a, b) => a + b);
-    final underexposedRatio = underexposed / totalPixels;
-    final overexposedRatio = overexposed / totalPixels;
+    int under = 0, over = 0;
+    for (int i = 0; i < 30; i++) {
+      under += histogram[i];
+    }
+    for (int i = 226; i < 256; i++) {
+      over += histogram[i];
+    }
+    final underRatio = under / total;
+    final overRatio = over / total;
 
-    // Determine exposure level
     ExposureLevel level;
     double score;
-
-    if (underexposedRatio > 0.3) {
-      level = ExposureLevel.tooLight;
-      score = 0.3;
-    } else if (overexposedRatio > 0.3) {
+    if (underRatio > 0.3) {
       level = ExposureLevel.tooDark;
-      score = 0.3;
-    } else if (mean >= 100 && mean <= 155) {
+      score = 0.25;
+    } else if (overRatio > 0.3) {
+      level = ExposureLevel.tooLight;
+      score = 0.25;
+    } else if (mean >= 100 && mean <= 165) {
       level = ExposureLevel.perfect;
       score = 1.0;
     } else if (mean < 100) {
-      level = ExposureLevel.slightlyDark;
-      score = 0.7;
+      level = mean < 60 ? ExposureLevel.tooDark : ExposureLevel.slightlyDark;
+      score = mean < 60 ? 0.4 : 0.7;
     } else {
-      level = ExposureLevel.slightlyLight;
-      score = 0.7;
+      level = mean > 205 ? ExposureLevel.tooLight : ExposureLevel.slightlyLight;
+      score = mean > 205 ? 0.4 : 0.7;
     }
 
     return _ExposureAnalysis(level: level, score: score, mean: mean);
   }
 
-  /// Analyze color temperature (white balance)
-  _ColorTempAnalysis _analyzeColorTemperature(img.Image image) {
-    int totalR = 0, totalB = 0;
-    int sampleCount = 0;
+  /// Estimate color temperature from the chroma plane(s).
+  _ColorTempAnalysis _analyzeColorTemperature(CameraImage image) {
+    double kelvin = 5000;
+    try {
+      if (image.planes.length >= 2) {
+        final p1 = image.planes[1];
+        final b1 = p1.bytes;
+        final int ps1 = p1.bytesPerPixel ?? 1;
+        double sumCb = 0, sumCr = 0;
+        int count = 0;
 
-    // Sample center region (assume artwork is centered)
-    final startX = (image.width * 0.25).round();
-    final endX = (image.width * 0.75).round();
-    final startY = (image.height * 0.25).round();
-    final endY = (image.height * 0.75).round();
+        if (image.planes.length >= 3 && ps1 == 1) {
+          // Android: separate U(Cb) and V(Cr) planes.
+          final b2 = image.planes[2].bytes;
+          final int n = math.min(b1.length, b2.length);
+          final int step = math.max(1, n ~/ 2000);
+          for (int i = 0; i < n; i += step) {
+            sumCb += b1[i];
+            sumCr += b2[i];
+            count++;
+          }
+        } else {
+          // iOS: interleaved CbCr in plane 1 (Cb at even, Cr at odd).
+          final int step = math.max(2, (b1.length ~/ 2000) * 2);
+          for (int i = 0; i + 1 < b1.length; i += step) {
+            sumCb += b1[i];
+            sumCr += b1[i + 1];
+            count++;
+          }
+        }
 
-    for (int y = startY; y < endY; y += 4) {
-      for (int x = startX; x < endX; x += 4) {
-        final pixel = image.getPixel(x, y);
-        totalR += pixel.r.toInt();
-        totalB += pixel.b.toInt();
-        sampleCount++;
+        if (count > 0) {
+          final double cb = sumCb / count; // ~blue
+          final double cr = sumCr / count; // ~red
+          // Warmth: more red & less blue => warmer (lower kelvin).
+          final double warmth = (cr - 128) - (cb - 128);
+          kelvin = (5000 - warmth * 60).clamp(2500.0, 8500.0);
+        }
       }
+    } catch (_) {
+      kelvin = 5000;
     }
 
-    final avgR = totalR / sampleCount;
-    final avgB = totalB / sampleCount;
-
-    // Estimate color temperature using simplified McCamy formula
-    // This is approximate - real color temp needs calibrated sensor data
-    final ratio = avgR / avgB;
-    final kelvin = _estimateKelvin(ratio);
-
-    // Score based on 4000-6000K target range
     final ColorTempLevel level;
     final double score;
-
     if (kelvin >= 4000 && kelvin <= 6000) {
       level = ColorTempLevel.perfect;
       score = 1.0;
@@ -147,39 +190,23 @@ class LightingAnalysisService {
       score = math.max(0.3, 1.0 - (kelvin - 6000) / 2000);
     }
 
-    return _ColorTempAnalysis(
-      kelvin: kelvin,
-      level: level,
-      score: score,
-    );
+    return _ColorTempAnalysis(kelvin: kelvin, level: level, score: score);
   }
 
-  /// Estimate color temperature from R/B ratio (simplified)
-  double _estimateKelvin(double ratio) {
-    // Rough approximation based on typical R/B ratios
-    if (ratio < 0.8) return 3000; // Very warm (incandescent)
-    if (ratio < 1.0) return 4000; // Warm
-    if (ratio < 1.2) return 5000; // Neutral (daylight)
-    if (ratio < 1.4) return 6000; // Cool daylight
-    return 7000; // Very cool (shade)
-  }
-
-  /// Analyze subject position in frame
-  _PositionAnalysis _analyzePosition(img.Image image) {
-    // Calculate brightness center of mass
-    int centerX = 0, centerY = 0;
-    int totalWeight = 0;
-
-    for (int y = 0; y < image.height; y += 4) {
-      for (int x = 0; x < image.width; x += 4) {
-        final pixel = image.getPixel(x, y);
-        final brightness = ((pixel.r + pixel.g + pixel.b) / 3).round();
-        centerX += x * brightness;
-        centerY += y * brightness;
-        totalWeight += brightness;
+  /// Subject position from the luma brightness center of mass.
+  _PositionAnalysis _analyzePosition(_Luma luma) {
+    final data = luma.data;
+    final w = luma.width, h = luma.height;
+    int cx = 0, cy = 0, totalWeight = 0;
+    for (int y = 0; y < h; y += 2) {
+      final base = y * w;
+      for (int x = 0; x < w; x += 2) {
+        final b = data[base + x];
+        cx += x * b;
+        cy += y * b;
+        totalWeight += b;
       }
     }
-
     if (totalWeight == 0) {
       return _PositionAnalysis(
         horizontal: PositionHint.centered,
@@ -187,211 +214,147 @@ class LightingAnalysisService {
         score: 1.0,
       );
     }
+    final centerX = cx / totalWeight;
+    final centerY = cy / totalWeight;
+    final targetX = w / 2;
+    final targetY = h / 2;
+    final devX = (centerX - targetX).abs() / targetX;
+    final devY = (centerY - targetY).abs() / targetY;
 
-    centerX ~/= totalWeight;
-    centerY ~/= totalWeight;
-
-    // Calculate deviation from center
-    final targetX = image.width / 2;
-    final targetY = image.height / 2;
-    final deviationX = (centerX - targetX).abs() / targetX;
-    final deviationY = (centerY - targetY).abs() / targetY;
-
-    // Determine horizontal position
     final PositionHint horizontal;
-    if (deviationX < 0.1) {
+    if (devX < 0.12) {
       horizontal = PositionHint.centered;
     } else if (centerX < targetX) {
       horizontal = PositionHint.moveRight;
     } else {
       horizontal = PositionHint.moveLeft;
     }
-
-    // Determine vertical position
     final PositionHint vertical;
-    if (deviationY < 0.1) {
+    if (devY < 0.12) {
       vertical = PositionHint.centered;
     } else if (centerY < targetY) {
       vertical = PositionHint.moveDown;
     } else {
       vertical = PositionHint.moveUp;
     }
-
-    // Calculate position score
-    final score = 1.0 - (deviationX + deviationY) / 2;
-
+    final score = (1.0 - (devX + devY) / 2).clamp(0.0, 1.0);
     return _PositionAnalysis(
       horizontal: horizontal,
       vertical: vertical,
-      score: score.clamp(0.0, 1.0),
+      score: score,
     );
   }
 
-  /// Detect motion blur using Laplacian variance
-  _BlurAnalysis _detectMotionBlur(img.Image image) {
-    // Sample center region
-    final startX = (image.width * 0.3).round();
-    final endX = (image.width * 0.7).round();
-    final startY = (image.height * 0.3).round();
-    final endY = (image.height * 0.7).round();
-
+  /// Motion blur via Laplacian variance on the center region.
+  _BlurAnalysis _detectMotionBlur(_Luma luma) {
+    final data = luma.data;
+    final w = luma.width, h = luma.height;
+    final sx = (w * 0.3).round(), ex = (w * 0.7).round();
+    final sy = (h * 0.3).round(), ey = (h * 0.7).round();
     double variance = 0;
     int count = 0;
-
-    for (int y = startY + 1; y < endY - 1; y += 3) {
-      for (int x = startX + 1; x < endX - 1; x += 3) {
-        final pixel = image.getPixel(x, y);
-        final brightness = (pixel.r + pixel.g + pixel.b) / 3;
-
-        // Calculate Laplacian (edge sharpness)
-        final neighbors = [
-          image.getPixel(x - 1, y),
-          image.getPixel(x + 1, y),
-          image.getPixel(x, y - 1),
-          image.getPixel(x, y + 1),
-        ];
-
-        double laplacian = brightness * 4;
-        for (final n in neighbors) {
-          laplacian -= (n.r + n.g + n.b) / 3;
-        }
-
-        variance += laplacian * laplacian;
+    for (int y = sy + 1; y < ey - 1; y++) {
+      final base = y * w;
+      for (int x = sx + 1; x < ex - 1; x++) {
+        final c = data[base + x];
+        final lap = c * 4 -
+            data[base + x - 1] -
+            data[base + x + 1] -
+            data[base - w + x] -
+            data[base + w + x];
+        variance += lap * lap;
         count++;
       }
     }
-
+    if (count == 0) return _BlurAnalysis(detected: false, intensity: 0.0);
     variance /= count;
-
-    // Low variance = blurry
-    final detected = variance < 100;
-    final intensity = detected ? (1.0 - variance / 100).clamp(0.0, 1.0) : 0.0;
-
+    final detected = variance < 80;
+    final intensity = detected ? (1.0 - variance / 80).clamp(0.0, 1.0) : 0.0;
     return _BlurAnalysis(detected: detected, intensity: intensity);
   }
 
-  /// Detect glare/reflections (bright spots)
-  _GlareAnalysis _detectGlare(img.Image image) {
-    int glarePixels = 0;
-    int totalPixels = 0;
-
-    for (int y = 0; y < image.height; y += 3) {
-      for (int x = 0; x < image.width; x += 3) {
-        final pixel = image.getPixel(x, y);
-        final brightness = (pixel.r + pixel.g + pixel.b) / 3;
-
-        if (brightness > 240) {
-          glarePixels++;
-        }
-        totalPixels++;
-      }
+  /// Glare from bright (near-white) pixels.
+  _GlareAnalysis _detectGlare(_Luma luma) {
+    final data = luma.data;
+    int glare = 0;
+    for (int i = 0; i < data.length; i++) {
+      if (data[i] > 244) glare++;
     }
-
-    final glareRatio = glarePixels / totalPixels;
-    final detected = glareRatio > 0.05;
-    final intensity = (glareRatio * 10).clamp(0.0, 1.0);
-
+    final ratio = glare / data.length;
+    final detected = ratio > 0.04;
+    final intensity = (ratio * 12).clamp(0.0, 1.0);
     return _GlareAnalysis(detected: detected, intensity: intensity);
   }
 
-  /// Detect harsh shadows (dark regions with high contrast)
-  _ShadowAnalysis _detectShadows(img.Image image) {
-    int darkPixels = 0;
-    int totalPixels = 0;
+  /// Harsh shadows: dark, high-contrast regions.
+  _ShadowAnalysis _detectShadows(_Luma luma) {
+    final data = luma.data;
+    final w = luma.width, h = luma.height;
+    int dark = 0;
     double contrastSum = 0;
-
-    for (int y = 1; y < image.height - 1; y += 3) {
-      for (int x = 1; x < image.width - 1; x += 3) {
-        final pixel = image.getPixel(x, y);
-        final brightness = (pixel.r + pixel.g + pixel.b) / 3;
-
-        if (brightness < 40) {
-          darkPixels++;
-
-          // Check contrast with neighbors
-          final right = image.getPixel(x + 1, y);
-          final rightBrightness = (right.r + right.g + right.b) / 3;
-          contrastSum += (rightBrightness - brightness).abs();
+    int total = 0;
+    for (int y = 1; y < h - 1; y++) {
+      final base = y * w;
+      for (int x = 1; x < w - 1; x++) {
+        final b = data[base + x];
+        if (b < 40) {
+          dark++;
+          contrastSum += (data[base + x + 1] - b).abs();
         }
-        totalPixels++;
+        total++;
       }
     }
-
-    final darkRatio = darkPixels / totalPixels;
-    final avgContrast = darkPixels > 0 ? contrastSum / darkPixels : 0;
-
-    final detected = darkRatio > 0.1 && avgContrast > 50;
-    final intensity = (darkRatio * 5).clamp(0.0, 1.0);
-
+    if (total == 0) return _ShadowAnalysis(detected: false, intensity: 0.0);
+    final darkRatio = dark / total;
+    final avgContrast = dark > 0 ? contrastSum / dark : 0;
+    final detected = darkRatio > 0.1 && avgContrast > 45;
+    final intensity = (darkRatio * 4).clamp(0.0, 1.0);
     return _ShadowAnalysis(detected: detected, intensity: intensity);
   }
 
-  /// Analyze lighting uniformity across the artwork using a 3x3 zone grid.
-  ///
-  /// Flags lighting that is brighter on one side than the other (a gradient
-  /// the simpler glare/shadow checks would miss) and reports which side is
-  /// darker so the user can even it out.
-  _UniformityAnalysis _analyzeUniformity(img.Image image) {
-    final startX = (image.width * 0.05).round();
-    final endX = (image.width * 0.95).round();
-    final startY = (image.height * 0.05).round();
-    final endY = (image.height * 0.95).round();
-    final regionW = endX - startX;
-    final regionH = endY - startY;
-
+  /// Lighting uniformity across a 3x3 zone grid, with a directional hint for
+  /// which side is darker.
+  _UniformityAnalysis _analyzeUniformity(_Luma luma) {
+    final data = luma.data;
+    final w = luma.width, h = luma.height;
+    final startX = (w * 0.05).round(), endX = (w * 0.95).round();
+    final startY = (h * 0.05).round(), endY = (h * 0.95).round();
+    final regionW = endX - startX, regionH = endY - startY;
     if (regionW <= 3 || regionH <= 3) {
       return _UniformityAnalysis(
-        score: 1.0,
-        detected: false,
-        hint: UnevenLightingHint.none,
-      );
+          score: 1.0, detected: false, hint: UnevenLightingHint.none);
     }
-
     final zoneSums = List<double>.filled(9, 0);
     final zoneCounts = List<int>.filled(9, 0);
-
-    for (int y = startY; y < endY; y += 3) {
+    for (int y = startY; y < endY; y++) {
       final zy = (((y - startY) * 3) ~/ regionH).clamp(0, 2);
-      for (int x = startX; x < endX; x += 3) {
+      final base = y * w;
+      for (int x = startX; x < endX; x++) {
         final zx = (((x - startX) * 3) ~/ regionW).clamp(0, 2);
-        final pixel = image.getPixel(x, y);
-        final brightness = (pixel.r + pixel.g + pixel.b) / 3;
         final idx = zy * 3 + zx;
-        zoneSums[idx] += brightness;
+        zoneSums[idx] += data[base + x];
         zoneCounts[idx]++;
       }
     }
-
     final zoneMeans = List<double>.generate(
-      9,
-      (i) => zoneCounts[i] > 0 ? zoneSums[i] / zoneCounts[i] : 0.0,
-    );
-
+        9, (i) => zoneCounts[i] > 0 ? zoneSums[i] / zoneCounts[i] : 0.0);
     final maxMean = zoneMeans.reduce(math.max);
     final minMean = zoneMeans.reduce(math.min);
     final avg = zoneMeans.reduce((a, b) => a + b) / 9;
-
     if (avg <= 0) {
       return _UniformityAnalysis(
-        score: 1.0,
-        detected: false,
-        hint: UnevenLightingHint.none,
-      );
+          score: 1.0, detected: false, hint: UnevenLightingHint.none);
     }
-
-    // Relative spread: 0 = perfectly even, ~0.5+ = strongly uneven.
     final spread = (maxMean - minMean) / avg;
     final score = (1 - spread / 0.5).clamp(0.0, 1.0);
     final detected = spread > 0.25;
 
-    // Dominant gradient direction (which side is darker).
     final leftMean = (zoneMeans[0] + zoneMeans[3] + zoneMeans[6]) / 3;
     final rightMean = (zoneMeans[2] + zoneMeans[5] + zoneMeans[8]) / 3;
     final topMean = (zoneMeans[0] + zoneMeans[1] + zoneMeans[2]) / 3;
     final bottomMean = (zoneMeans[6] + zoneMeans[7] + zoneMeans[8]) / 3;
     final hDiff = leftMean - rightMean;
     final vDiff = topMean - bottomMean;
-
     var hint = UnevenLightingHint.none;
     if (detected) {
       if (hDiff.abs() >= vDiff.abs()) {
@@ -404,11 +367,9 @@ class LightingAnalysisService {
             : UnevenLightingHint.bottomDarker;
       }
     }
-
     return _UniformityAnalysis(score: score, detected: detected, hint: hint);
   }
 
-  /// Calculate overall quality score
   double _calculateOverallScore(
     double exposureScore,
     double colorTempScore,
@@ -430,43 +391,15 @@ class LightingAnalysisService {
 
     return (baseScore - penalties).clamp(0.0, 1.0);
   }
+}
 
-  /// Convert YUV420 camera image to RGB (optimized for analysis)
-  img.Image? _convertYUV420ToImage(CameraImage image) {
-    try {
-      final int width = image.width;
-      final int height = image.height;
+/// Small downsampled luma (grayscale) buffer.
+class _Luma {
+  final Uint8List data;
+  final int width;
+  final int height;
 
-      final int uvRowStride = image.planes[1].bytesPerRow;
-      final int uvPixelStride = image.planes[1].bytesPerPixel ?? 1;
-
-      final rgbImage = img.Image(width: width, height: height);
-
-      for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-          final int uvIndex =
-              uvPixelStride * (x / 2).floor() + uvRowStride * (y / 2).floor();
-          final int index = y * width + x;
-
-          final yp = image.planes[0].bytes[index];
-          final up = image.planes[1].bytes[uvIndex];
-          final vp = image.planes[2].bytes[uvIndex];
-
-          int r = (yp + vp * 1436 / 1024 - 179).round().clamp(0, 255);
-          int g = (yp - up * 46549 / 131072 + 44 - vp * 93604 / 131072 + 91)
-              .round()
-              .clamp(0, 255);
-          int b = (yp + up * 1814 / 1024 - 227).round().clamp(0, 255);
-
-          rgbImage.setPixelRgba(x, y, r, g, b, 255);
-        }
-      }
-
-      return rgbImage;
-    } catch (e) {
-      return null;
-    }
-  }
+  _Luma(this.data, this.width, this.height);
 }
 
 // Helper classes
@@ -660,7 +593,7 @@ class LightingAnalysisResult {
     if (positionVertical == PositionHint.moveDown) hints.add('Move camera down');
     if (positionHorizontal == PositionHint.moveLeft) hints.add('Move camera left');
     if (positionHorizontal == PositionHint.moveRight) hints.add('Move camera right');
-    
+
     return hints.isEmpty ? null : hints.join(' • ');
   }
 

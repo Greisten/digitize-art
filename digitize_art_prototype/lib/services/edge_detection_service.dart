@@ -14,7 +14,12 @@ class EdgeDetectionService {
   static const int _targetWidth = 160;
 
   /// Minimum confidence before we report a usable detection.
-  static const double _detectionThreshold = 0.4;
+  static const double _detectionThreshold = 0.55;
+
+  /// Minimum average gradient magnitude for a frame to contain a real subject.
+  /// Flat/dark/blank scenes fall below this and report no detection (avoids
+  /// "artwork detected" when pointing at nothing).
+  static const double _minMeanGradient = 12.0;
 
   /// Detect the artwork quadrilateral in [image].
   ///
@@ -119,6 +124,10 @@ class EdgeDetectionService {
     }
 
     if (total <= 0) return null;
+
+    // Reject flat / dark / textureless scenes (no real subject in frame).
+    final double meanGradient = total / ((w - 2) * (h - 2));
+    if (meanGradient < _minMeanGradient) return null;
 
     final bounds = _projectionBounds(rowSum, colSum, w, h);
     if (bounds == null) return null;

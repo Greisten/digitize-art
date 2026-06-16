@@ -28,15 +28,16 @@ cd digitize-art/digitize_art_prototype
 git checkout feat/v1.1-smart-detection
 ```
 
-## 3. Régénérer le projet iOS
+## 3. Installer les dépendances iOS
 
-Le dépôt ne contient pas l'échafaudage Xcode (Runner.xcodeproj / Podfile). On le régénère **sans toucher au code `lib/`** :
+Le projet iOS (Runner.xcodeproj, asset catalog, icône) est désormais inclus dans le dépôt :
 
 ```bash
-flutter create --platforms=ios .
 flutter pub get
 cd ios && pod install && cd ..
 ```
+
+> Si Xcode signale un projet à mettre à niveau (Flutter plus récent), accepte la migration proposée. En dernier recours seulement : `flutter create --platforms=ios .` régénère l'échafaudage sans toucher à `lib/`.
 
 ## 4. Signer l'app (Apple ID gratuit suffit pour un test)
 

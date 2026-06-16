@@ -6,7 +6,9 @@ import '../models/user_model.dart';
 import 'database_service.dart';
 
 class AuthService extends ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Lazy so merely constructing the service doesn't require Firebase to be
+  // initialized (lets demo mode run without backend config).
+  FirebaseAuth get _auth => FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final DatabaseService _databaseService = DatabaseService();
 

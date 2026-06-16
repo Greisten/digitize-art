@@ -14,11 +14,18 @@ import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
 
+/// Demo mode (build with `--dart-define=DEMO=true`) skips Firebase and goes
+/// straight to the camera, so the capture/detection/editor/gallery features
+/// can be tested on a device without any backend configuration.
+const bool kDemoMode = bool.fromEnvironment('DEMO');
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
+  // Initialize Firebase (skipped in demo mode).
+  if (!kDemoMode) {
+    await Firebase.initializeApp();
+  }
 
   // Lock to portrait mode
   SystemChrome.setPreferredOrientations([
@@ -109,6 +116,17 @@ class _InitialScreenState extends State<InitialScreen> {
 
   Future<void> _determineInitialRoute() async {
     await Future.delayed(const Duration(milliseconds: 500)); // Splash delay
+
+    // Demo mode: skip auth/onboarding and go straight to the camera.
+    if (kDemoMode) {
+      if (mounted) {
+        setState(() {
+          _nextScreen = const CameraScreen();
+          _isLoading = false;
+        });
+      }
+      return;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final selectedLanguage = prefs.getString('selected_language');

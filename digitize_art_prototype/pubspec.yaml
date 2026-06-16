@@ -12,8 +12,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   
-  # Internationalization
-  intl: ^0.19.0
+  # Internationalization (version pinned by the Flutter SDK's
+  # flutter_localizations — keep flexible so it works across Flutter versions)
+  intl: any
   
   # Camera
   camera: ^0.10.5+5

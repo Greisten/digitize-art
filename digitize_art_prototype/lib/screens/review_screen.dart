@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import '../services/scan_storage_service.dart';
 import '../theme/app_theme.dart';
 import 'edit_screen.dart';
@@ -52,6 +53,23 @@ class _ReviewScreenState extends State<ReviewScreen> {
     if (saved == true && mounted) Navigator.of(context).pop(true);
   }
 
+  Future<void> _saveToPhotos() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Gal.putImage(widget.imagePath);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Enregistré dans Photos')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Impossible d\'enregistrer dans Photos'),
+          backgroundColor: AppTheme.errorMain,
+        ),
+      );
+    }
+  }
+
   Future<void> _discard() async {
     try {
       final file = File(widget.imagePath);
@@ -69,6 +87,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
         foregroundColor: Colors.white,
         title: const Text('Aperçu'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.download_rounded),
+            tooltip: 'Enregistrer dans Photos',
+            onPressed: _isSaving ? null : _saveToPhotos,
+          ),
           if (widget.isHdr)
             Container(
               margin: const EdgeInsets.symmetric(vertical: 14),

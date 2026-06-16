@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import '../models/scan_model.dart';
 import '../services/scan_storage_service.dart';
 import '../theme/app_theme.dart';
@@ -232,11 +233,29 @@ class _EmptyGallery extends StatelessWidget {
   }
 }
 
-/// Full-screen view of a single scan with a delete action (dark for contrast).
+/// Full-screen view of a single scan with save-to-Photos and delete actions
+/// (dark for contrast).
 class _ScanViewer extends StatelessWidget {
   final ScanModel scan;
 
   const _ScanViewer({required this.scan});
+
+  Future<void> _saveToPhotos(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Gal.putImage(scan.filePath);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Enregistré dans Photos')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Impossible d\'enregistrer dans Photos'),
+          backgroundColor: AppTheme.errorMain,
+        ),
+      );
+    }
+  }
 
   Future<void> _confirmDelete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -273,6 +292,11 @@ class _ScanViewer extends StatelessWidget {
         foregroundColor: Colors.white,
         title: Text(scan.title ?? 'Scan'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.download_rounded),
+            tooltip: 'Enregistrer dans Photos',
+            onPressed: () => _saveToPhotos(context),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Supprimer',

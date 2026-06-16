@@ -48,6 +48,7 @@ dependencies:
   
   # URL launcher
   url_launcher: ^6.2.4
+  gal: ^2.3.2
 
 dev_dependencies:
   flutter_test:

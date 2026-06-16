@@ -94,7 +94,7 @@ class DatabaseService {
   Future<int> getUsersCount() async {
     try {
       final querySnapshot = await _usersCollection.count().get();
-      return querySnapshot.count;
+      return querySnapshot.count ?? 0;
     } catch (e) {
       debugPrint('Error getting users count: $e');
       return 0;

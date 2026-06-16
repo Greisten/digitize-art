@@ -28,7 +28,7 @@ dependencies:
   opencv_dart: ^1.0.4
   
   # AR and rendering
-  flutter_gl: ^0.0.22
+  flutter_gl: ^0.0.21
   
   # State management
   provider: ^6.1.1

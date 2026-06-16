@@ -31,6 +31,7 @@ class UserModel {
       'uid': uid,
       'email': email,
       'displayName': displayName,
+      'artistName': artistName,
       'photoURL': photoURL,
       'phoneNumber': phoneNumber,
       'authProvider': authProvider.name,
@@ -47,6 +48,7 @@ class UserModel {
       uid: data['uid'] ?? doc.id,
       email: data['email'] ?? '',
       displayName: data['displayName'],
+      artistName: data['artistName'] ?? '',
       photoURL: data['photoURL'],
       phoneNumber: data['phoneNumber'],
       authProvider: AuthProvider.values.firstWhere(
@@ -66,6 +68,7 @@ class UserModel {
     String email,
     AuthProvider provider, {
     String? displayName,
+    String? artistName,
     String? photoURL,
     String? phoneNumber,
   }) {
@@ -73,6 +76,9 @@ class UserModel {
       uid: uid,
       email: email,
       displayName: displayName,
+      // Default the artist name to the email's local part until the user
+      // sets one explicitly.
+      artistName: artistName ?? email.split('@').first,
       photoURL: photoURL,
       phoneNumber: phoneNumber,
       authProvider: provider,
@@ -93,6 +99,7 @@ class UserModel {
       uid: uid,
       email: email,
       displayName: displayName ?? this.displayName,
+      artistName: artistName,
       photoURL: photoURL ?? this.photoURL,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       authProvider: authProvider,

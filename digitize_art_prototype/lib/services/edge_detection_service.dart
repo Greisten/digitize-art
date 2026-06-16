@@ -1,65 +1,103 @@
 import 'dart:typed_data';
-import 'dart:math' as math;
 import 'package:camera/camera.dart';
+import 'package:opencv_dart/opencv_dart.dart' as cv;
 
-/// Detects the quadrilateral of an artwork in a live camera frame.
+/// Detects the quadrilateral of an artwork in a live camera frame using OpenCV.
 ///
-/// The frame is downsampled to a small luma image and a Sobel gradient is
-/// computed; the artwork's outer border is then located from the edge
-/// projection peaks. Working on a ~160px-wide luma buffer (instead of a
-/// full-resolution RGB conversion) keeps per-frame cost low enough for the
-/// real-time camera stream.
+/// Pipeline (the classic document-scanner approach): downsample the luma (Y)
+/// plane to a grayscale Mat, blur, Canny edge detection, then find the largest
+/// 4-point convex-ish contour via findContours + approxPolyDP. Much more
+/// robust than a pure-Dart heuristic, especially at an angle.
+///
+/// The public API (EdgeDetectionResult / Corner / detectEdges) is unchanged so
+/// the camera screen and AR overlay keep working as-is.
 class EdgeDetectionService {
-  /// Downsample target width for fast per-frame analysis.
-  static const int _targetWidth = 160;
+  /// Downsample target width (OpenCV is fast enough for a larger buffer than
+  /// the old Dart path, which improves corner accuracy).
+  static const int _targetWidth = 300;
 
-  /// Minimum confidence before we report a usable detection.
-  static const double _detectionThreshold = 0.45;
+  /// Minimum quad area (fraction of the frame) to count as an artwork.
+  static const double _minAreaRatio = 0.12;
 
-  /// Minimum average gradient magnitude for a frame to contain a real subject.
-  /// Flat/dark/blank scenes fall below this and report no detection (avoids
-  /// "artwork detected" when pointing at nothing).
-  static const double _minMeanGradient = 12.0;
-
-  /// Detect the artwork quadrilateral in [image].
-  ///
-  /// [sensorOrientation] is the camera sensor orientation in degrees
-  /// (0/90/180/270). Detected corners are rotated by it so they line up with
-  /// the upright camera preview.
   Future<EdgeDetectionResult> detectEdges(
     CameraImage image, {
     int sensorOrientation = 90,
   }) async {
+    cv.Mat? gray;
+    cv.Mat? blurred;
+    cv.Mat? edges;
+    cv.Contours? contours;
+    cv.VecVec4i? hierarchy;
+
     try {
-      final gray = _downsampleLuma(image);
-      if (gray == null) return EdgeDetectionResult.empty();
+      final luma = _downsampleLuma(image);
+      if (luma == null) return EdgeDetectionResult.empty();
 
-      final quad = _findArtworkQuad(gray.data, gray.width, gray.height);
-      if (quad == null) return EdgeDetectionResult.empty();
-
-      // Rotate the corners into the preview's coordinate space, then re-order
-      // them as top-left, top-right, bottom-right, bottom-left so the overlay
-      // draws a clean, non-self-intersecting polygon.
-      final corners = _orderCorners(
-        quad.corners.map((c) => _rotate(c, sensorOrientation)).toList(),
+      gray = cv.Mat.fromList(
+        luma.height,
+        luma.width,
+        cv.MatType.CV_8UC1,
+        luma.data,
       );
+      blurred = cv.gaussianBlur(gray, (5, 5), 0);
+      edges = cv.canny(blurred, 60, 160);
 
-      final detected = quad.confidence >= _detectionThreshold;
+      final found = cv.findContours(
+        edges,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_SIMPLE,
+      );
+      contours = found.$1;
+      hierarchy = found.$2;
+
+      final double frameArea = (luma.width * luma.height).toDouble();
+      final double minArea = frameArea * _minAreaRatio;
+
+      double bestArea = 0;
+      List<Corner>? bestQuad;
+
+      for (int i = 0; i < contours.length; i++) {
+        final contour = contours[i];
+        final double area = cv.contourArea(contour);
+        if (area < minArea || area <= bestArea) continue;
+
+        final double peri = cv.arcLength(contour, true);
+        final approx = cv.approxPolyDP(contour, 0.02 * peri, true);
+        if (approx.length == 4) {
+          bestArea = area;
+          bestQuad = [
+            for (int j = 0; j < 4; j++)
+              Corner(approx[j].x / luma.width, approx[j].y / luma.height),
+          ];
+        }
+        approx.dispose();
+      }
+
+      if (bestQuad == null) return EdgeDetectionResult.empty();
+
+      final corners = _orderCorners(
+        bestQuad.map((c) => _rotate(c, sensorOrientation)).toList(),
+      );
+      final confidence = (bestArea / frameArea).clamp(0.0, 1.0);
+
       return EdgeDetectionResult(
-        hasDetection: detected,
-        corners: detected ? corners : const [],
-        confidence: quad.confidence,
+        hasDetection: true,
+        corners: corners,
+        confidence: confidence,
       );
     } catch (e) {
       return EdgeDetectionResult.empty();
+    } finally {
+      gray?.dispose();
+      blurred?.dispose();
+      edges?.dispose();
+      contours?.dispose();
+      hierarchy?.dispose();
     }
   }
 
   /// Build a small grayscale buffer from the camera frame's luma (Y) plane.
-  ///
-  /// The Y plane already holds per-pixel brightness, so no YUV->RGB conversion
-  /// is needed for edge detection.
-  _Gray? _downsampleLuma(CameraImage image) {
+  _Luma? _downsampleLuma(CameraImage image) {
     if (image.planes.isEmpty) return null;
 
     final plane = image.planes[0];
@@ -74,143 +112,22 @@ class EdgeDetectionService {
     if (scale <= 0) return null;
 
     final int dw = _targetWidth;
-    final int dh = math.max(1, (sh / scale).round());
+    final int dh = (sh / scale).round() < 1 ? 1 : (sh / scale).round();
     final data = Uint8List(dw * dh);
 
     for (int dy = 0; dy < dh; dy++) {
-      final int sy = (dy * scale).floor().clamp(0, sh - 1);
+      int sy = (dy * scale).floor();
+      if (sy > sh - 1) sy = sh - 1;
       final int rowBase = sy * rowStride;
       final int dstBase = dy * dw;
       for (int dx = 0; dx < dw; dx++) {
-        final int sx = (dx * scale).floor().clamp(0, sw - 1);
+        int sx = (dx * scale).floor();
+        if (sx > sw - 1) sx = sw - 1;
         data[dstBase + dx] = bytes[rowBase + sx * pixelStride];
       }
     }
 
-    return _Gray(data, dw, dh);
-  }
-
-  /// Locate the artwork's bounding quadrilateral from a grayscale buffer.
-  _QuadResult? _findArtworkQuad(Uint8List gray, int w, int h) {
-    if (w < 8 || h < 8) return null;
-
-    final rowSum = Float64List(h);
-    final colSum = Float64List(w);
-    double total = 0;
-
-    // Sobel gradient magnitude, accumulated into row/column edge projections.
-    for (int y = 1; y < h - 1; y++) {
-      final int r0 = (y - 1) * w;
-      final int r1 = y * w;
-      final int r2 = (y + 1) * w;
-      for (int x = 1; x < w - 1; x++) {
-        final int tl = gray[r0 + x - 1];
-        final int tc = gray[r0 + x];
-        final int tr = gray[r0 + x + 1];
-        final int ml = gray[r1 + x - 1];
-        final int mr = gray[r1 + x + 1];
-        final int bl = gray[r2 + x - 1];
-        final int bc = gray[r2 + x];
-        final int br = gray[r2 + x + 1];
-
-        final int gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl);
-        final int gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
-        final double mag = (gx.abs() + gy.abs()).toDouble();
-
-        rowSum[y] += mag;
-        colSum[x] += mag;
-        total += mag;
-      }
-    }
-
-    if (total <= 0) return null;
-
-    // Reject flat / dark / textureless scenes (no real subject in frame).
-    final double meanGradient = total / ((w - 2) * (h - 2));
-    if (meanGradient < _minMeanGradient) return null;
-
-    final bounds = _projectionBounds(rowSum, colSum, w, h);
-    if (bounds == null) return null;
-
-    final int left = bounds[0];
-    final int right = bounds[1];
-    final int top = bounds[2];
-    final int bottom = bounds[3];
-
-    final double boxW = (right - left).toDouble();
-    final double boxH = (bottom - top).toDouble();
-    // Reject boxes that are too small to be a real artwork in frame.
-    if (boxW < w * 0.12 || boxH < h * 0.12) return null;
-
-    // Area score: favor an artwork filling 20%-90% of the frame.
-    final double areaRatio = (boxW * boxH) / (w * h);
-    final double areaScore;
-    if (areaRatio >= 0.2 && areaRatio <= 0.9) {
-      areaScore = 1.0;
-    } else if (areaRatio < 0.2) {
-      areaScore = areaRatio / 0.2;
-    } else {
-      areaScore = math.max(0.0, 1 - (areaRatio - 0.9) / 0.1);
-    }
-
-    // Strength score: how strong the border projection peaks are relative to
-    // the average edge energy.
-    final double meanRow = total / h;
-    final double borderStrength =
-        (rowSum[top] + rowSum[bottom] + colSum[left] + colSum[right]) / 4;
-    final double strengthScore =
-        meanRow <= 0 ? 0.0 : (borderStrength / (meanRow * 3)).clamp(0.0, 1.0);
-
-    final double confidence =
-        (areaScore * 0.6 + strengthScore * 0.4).clamp(0.0, 1.0);
-
-    final corners = <Corner>[
-      Corner(left / w, top / h),
-      Corner(right / w, top / h),
-      Corner(right / w, bottom / h),
-      Corner(left / w, bottom / h),
-    ];
-
-    return _QuadResult(corners, confidence);
-  }
-
-  /// Find the outermost rows/columns whose edge projection exceeds 30% of the
-  /// strongest projection. Returns `[left, right, top, bottom]`.
-  List<int>? _projectionBounds(
-    Float64List rowSum,
-    Float64List colSum,
-    int w,
-    int h,
-  ) {
-    double maxRow = 0;
-    double maxCol = 0;
-    for (int y = 0; y < h; y++) {
-      if (rowSum[y] > maxRow) maxRow = rowSum[y];
-    }
-    for (int x = 0; x < w; x++) {
-      if (colSum[x] > maxCol) maxCol = colSum[x];
-    }
-    if (maxRow <= 0 || maxCol <= 0) return null;
-
-    final double rowThr = maxRow * 0.30;
-    final double colThr = maxCol * 0.30;
-
-    int top = -1, bottom = -1, left = -1, right = -1;
-    for (int y = 0; y < h; y++) {
-      if (rowSum[y] >= rowThr) {
-        if (top < 0) top = y;
-        bottom = y;
-      }
-    }
-    for (int x = 0; x < w; x++) {
-      if (colSum[x] >= colThr) {
-        if (left < 0) left = x;
-        right = x;
-      }
-    }
-
-    if (top < 0 || left < 0 || bottom <= top || right <= left) return null;
-    return [left, right, top, bottom];
+    return _Luma(data, dw, dh);
   }
 
   /// Rotate a normalized corner by the sensor orientation so it matches the
@@ -262,20 +179,12 @@ class EdgeDetectionService {
 }
 
 /// Small grayscale buffer (row-major, one byte per pixel).
-class _Gray {
+class _Luma {
   final Uint8List data;
   final int width;
   final int height;
 
-  _Gray(this.data, this.width, this.height);
-}
-
-/// Internal detection result before orientation handling.
-class _QuadResult {
-  final List<Corner> corners;
-  final double confidence;
-
-  _QuadResult(this.corners, this.confidence);
+  _Luma(this.data, this.width, this.height);
 }
 
 class EdgeDetectionResult {
